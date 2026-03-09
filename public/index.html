@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Job Tracker</title>
+
+<style>
+
+body{
+font-family:Arial;
+margin:40px;
+background:#f5f5f5;
+color:#222;
+}
+
+.dark{
+background:#1e1e1e;
+color:#ddd;
+}
+
+.dark table{
+background:#2a2a2a;
+}
+
+.dark th{
+background:#333;
+}
+
+table{
+border-collapse:collapse;
+width:100%;
+margin-top:10px;
+}
+
+th,td{
+border:1px solid #ccc;
+padding:10px;
+}
+
+tr:hover{
+cursor:pointer;
+}
+
+/* STATUS COLORS */
+
+.status0{background:#d4edff;}
+.status1{background:#fff3cd;}
+.status2{background:#e2e3ff;}
+.status3{background:#d4edda;}
+.status4{background:#f8d7da;}
+
+.dark .status0{background:#264653;}
+.dark .status1{background:#6b5c00;}
+.dark .status2{background:#3a3a6b;}
+.dark .status3{background:#1f5c3a;}
+.dark .status4{background:#6b2c2c;}
+
+.badge{
+background:#007bff;
+color:white;
+padding:2px 6px;
+font-size:11px;
+border-radius:4px;
+margin-left:6px;
+}
+
+textarea{
+width:100%;
+height:40px;
+}
+
+.controls{
+margin-bottom:15px;
+}
+
+.stats{
+margin-bottom:15px;
+padding:10px;
+background:white;
+}
+
+.dark .stats{
+background:#2a2a2a;
+}
+
+button{
+padding:6px 10px;
+margin-right:5px;
+}
+
+</style>
+</head>
+
+<body>
+
+<h1>Job Application Tracker</h1>
+
+<div class="controls">
+
+<input id="searchBox" placeholder="Search jobs...">
+
+<select id="siteFilter">
+<option value="">All Sites</option>
+</select>
+
+<button onclick="toggleDark()">Dark Mode</button>
+
+</div>
+
+<div class="stats" id="stats"></div>
+
+<table id="jobTable">
+
+<thead>
+<tr>
+<th>Site</th>
+<th>ID</th>
+<th>Title</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+
+<tbody></tbody>
+
+</table>
+
+<script>
+
+const statusPriority={
+"3":0,
+"1":1,
+"2":2,
+"0":3,
+"4":4
+};
+
+let statuses={}
+let allJobs=[]
+let selectedJob=null
+
+async function loadJobs(){
+
+const res=await fetch("/jobs")
+const data=await res.json()
+
+statuses=data["Status Definitions"]
+
+allJobs=[]
+
+for(const site in data){
+
+if(site==="Status Definitions") continue
+
+data[site].jobs.forEach(job=>{
+
+allJobs.push({
+site,
+url:data[site].URL,
+...job
+})
+
+})
+
+}
+
+populateSiteFilter()
+renderJobs()
+
+}
+
+function populateSiteFilter(){
+
+const filter=document.getElementById("siteFilter")
+
+const sites=[...new Set(allJobs.map(j=>j.site))]
+
+filter.innerHTML='<option value="">All Sites</option>'
+
+sites.forEach(site=>{
+
+const opt=document.createElement("option")
+opt.value=site
+opt.textContent=site
+
+filter.appendChild(opt)
+
+})
+
+}
+
+function renderJobs(){
+
+const tbody=document.querySelector("#jobTable tbody")
+
+tbody.innerHTML=""
+
+const search=document.getElementById("searchBox").value.toLowerCase()
+const siteFilter=document.getElementById("siteFilter").value
+
+let jobs=allJobs.filter(job=>{
+
+const matchSearch=
+job.title.toLowerCase().includes(search) ||
+job.id.includes(search)
+
+const matchSite=
+!siteFilter || job.site===siteFilter
+
+return matchSearch && matchSite
+
+})
+
+/* SORT newest date first */
+
+jobs.sort((a,b)=> new Date(b.date) - new Date(a.date))
+
+updateStats(jobs)
+
+jobs.forEach(job=>{
+
+const row=document.createElement("tr")
+
+row.className="status"+job.status
+
+row.onclick=()=>{
+selectedJob=job
+window.open(job.url+job.id,"_blank")
+}
+
+let title=job.title
+
+if(job.status==="0"){
+title+=` <span class="badge">NEW</span>`
+}
+
+let options=""
+
+for(const key in statuses){
+
+options+=`
+<option value="${key}" ${job.status===key?"selected":""}>
+${statuses[key]}
+</option>
+`
+
+}
+
+row.innerHTML=`
+
+<td>${job.site}</td>
+<td>${job.id}</td>
+<td>${title}</td>
+
+<td onclick="event.stopPropagation()">
+<select onchange="updateStatus('${job.site}','${job.id}',this.value)">
+${options}
+</select>
+</td>
+
+<td onclick="event.stopPropagation()">
+<textarea onchange="updateNotes('${job.site}','${job.id}',this.value)">
+${job.notes||""}
+</textarea>
+</td>
+
+`
+
+tbody.appendChild(row)
+
+})
+
+}
+
+function updateStats(jobs){
+
+const counts={0:0,1:0,2:0,3:0,4:0}
+
+jobs.forEach(j=>counts[j.status]++)
+
+document.getElementById("stats").innerHTML=`
+
+New: ${counts[0]} |
+Applied: ${counts[1]} |
+Replies: ${counts[2]} |
+Interviewing: ${counts[3]} |
+Declined: ${counts[4]} |
+Total: ${jobs.length}
+
+`
+
+}
+
+async function updateStatus(site,id,status){
+
+await fetch("/updateStatus",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({site,jobId:id,status})
+})
+
+loadJobs()
+
+}
+
+async function updateNotes(site,id,notes){
+
+await fetch("/updateNotes",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({site,jobId:id,notes})
+})
+
+}
+
+/* KEYBOARD SHORTCUTS */
+
+document.addEventListener("keydown",e=>{
+
+if(!selectedJob) return
+
+if(e.key==="a") updateStatus(selectedJob.site,selectedJob.id,"1")
+if(e.key==="i") updateStatus(selectedJob.site,selectedJob.id,"3")
+if(e.key==="d") updateStatus(selectedJob.site,selectedJob.id,"4")
+
+})
+
+/* DARK MODE */
+
+function toggleDark(){
+
+document.body.classList.toggle("dark")
+
+}
+
+/* SEARCH */
+
+document.getElementById("searchBox")
+.addEventListener("input",renderJobs)
+
+document.getElementById("siteFilter")
+.addEventListener("change",renderJobs)
+
+loadJobs()
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Job Tracker</title>
+
+<style>
+
+body{
+    font-family: Arial;
+    margin:40px;
+    background:#f5f5f5;
+}
+
+h1{
+    margin-bottom:10px;
+}
+
+.controls{
+    margin-bottom:20px;
+}
+
+input,select{
+    padding:6px;
+    margin-right:10px;
+}
+
+<button onclick="loadJobs()">Refresh Jobs</button>
+
+table{
+    border-collapse: collapse;
+    width:100%;
+    background:white;
+}
+
+th,td{
+    border:1px solid #ccc;
+    padding:10px;
+}
+
+th{
+    background:#eee;
+}
+
+tr:hover{
+    cursor:pointer;
+    filter:brightness(.95);
+}
+
+/* STATUS COLORS */
+
+.status0{background:#d4edff;} /* new */
+.status1{background:#fff3cd;} /* applied */
+.status2{background:#e2e3ff;} /* reply */
+.status3{background:#d4edda;} /* interview */
+.status4{background:#f8d7da;} /* declined */
+
+/* BADGE */
+
+.badge{
+    background:#007bff;
+    color:white;
+    padding:2px 6px;
+    font-size:11px;
+    border-radius:4px;
+    margin-left:6px;
+}
+
+/* STATS */
+
+.stats{
+    margin-bottom:20px;
+    padding:10px;
+    background:white;
+    border:1px solid #ddd;
+}
+
+.stat{
+    display:inline-block;
+    margin-right:20px;
+    font-weight:bold;
+}
+
+</style>
+</head>
+
+<body>
+
+<h1>Job Application Tracker</h1>
+
+<div class="stats" id="stats"></div>
+
+<div class="controls">
+
+<input id="searchBox" placeholder="Search jobs...">
+
+<select id="siteFilter">
+<option value="">All Sites</option>
+</select>
+
+</div>
+
+<table id="jobTable">
+
+<thead>
+<tr>
+<th>Site</th>
+<th>ID</th>
+<th>Title</th>
+<th>Status</th>
+</tr>
+</thead>
+
+<tbody></tbody>
+
+</table>
+
+<script>
+
+const statusPriority={
+"3":0,
+"1":1,
+"2":2,
+"0":3,
+"4":4
+};
+
+let allJobs=[];
+let statuses={};
+
+async function loadJobs(){
+
+const res=await fetch("/jobs");
+const data=await res.json();
+
+statuses=data["Status Definitions"];
+
+allJobs=[];
+
+for(const site in data){
+
+if(site==="Status Definitions") continue;
+
+data[site].jobs.forEach(job=>{
+
+allJobs.push({
+site,
+url:data[site].URL,
+...job
+});
+
+});
+
+}
+
+populateSiteFilter();
+renderJobs();
+
+}
+
+function populateSiteFilter(){
+
+const filter=document.getElementById("siteFilter");
+
+const sites=[...new Set(allJobs.map(j=>j.site))];
+
+filter.innerHTML='<option value="">All Sites</option>';
+
+sites.forEach(site=>{
+
+const opt=document.createElement("option");
+opt.value=site;
+opt.textContent=site;
+
+filter.appendChild(opt);
+
+});
+
+}
+
+function renderJobs(){
+
+const tbody=document.querySelector("#jobTable tbody");
+
+tbody.innerHTML="";
+
+const search=document.getElementById("searchBox").value.toLowerCase();
+
+const siteFilter=document.getElementById("siteFilter").value;
+
+let jobs=allJobs.filter(job=>{
+
+const matchesSearch=
+job.title.toLowerCase().includes(search) ||
+job.id.includes(search);
+
+const matchesSite=
+!siteFilter || job.site===siteFilter;
+
+return matchesSearch && matchesSite;
+
+});
+
+jobs.sort((a,b)=>statusPriority[a.status]-statusPriority[b.status]);
+
+updateStats(jobs);
+
+jobs.forEach(job=>{
+
+const row=document.createElement("tr");
+
+row.className="status"+job.status;
+
+row.onclick=()=>window.open(job.url+job.id,"_blank");
+
+let title=job.title;
+
+if(job.status==="0"){
+title+=` <span class="badge">NEW</span>`;
+}
+
+let options="";
+
+for(const key in statuses){
+
+options+=`
+<option value="${key}" ${job.status===key?"selected":""}>
+${statuses[key]}
+</option>
+`;
+
+}
+
+row.innerHTML=`
+
+<td>${job.site}</td>
+<td>${job.id}</td>
+<td>${title}</td>
+
+<td onclick="event.stopPropagation()">
+<select onchange="updateStatus('${job.site}','${job.id}',this.value)">
+${options}
+</select>
+</td>
+
+`;
+
+tbody.appendChild(row);
+
+});
+
+}
+
+function updateStats(jobs){
+
+const counts={
+0:0,1:0,2:0,3:0,4:0
+};
+
+jobs.forEach(j=>counts[j.status]++);
+
+document.getElementById("stats").innerHTML=`
+
+<span class="stat">New: ${counts[0]}</span>
+<span class="stat">Applied: ${counts[1]}</span>
+<span class="stat">Replies: ${counts[2]}</span>
+<span class="stat">Interviewing: ${counts[3]}</span>
+<span class="stat">Declined: ${counts[4]}</span>
+<span class="stat">Total: ${jobs.length}</span>
+
+`;
+
+}
+
+async function updateStatus(site,id,status){
+
+await fetch("/updateStatus",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({site,jobId:id,status})
+});
+
+loadJobs();
+
+}
+
+/* SEARCH + FILTER */
+
+document.getElementById("searchBox")
+.addEventListener("input",renderJobs);
+
+document.getElementById("siteFilter")
+.addEventListener("change",renderJobs);
+
+/* AUTO REFRESH (scraper updates JSON) */
+
+loadJobs();
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,35 @@
+{
+  "fakesite0": {
+    "Site": "Specialists",
+    "URL": "https://jobs.fakespecialist.com/jb/",
+    "jobs": [
+      {
+        "id": "13717532",
+        "title": "Engineer",
+        "status": "3",
+        "date": "2026-03-09",
+        "notes": "not enough money"
+      }
+    ]
+  },
+  "fakesite1": {
+    "Site": "Fake Site",
+    "URL": "https://fakesite.com",
+    "jobs": [
+      {
+        "id": "333",
+        "title": "API Automation Test Engineer",
+        "status": "0",
+        "date": "2026-03-09",
+        "notes": "too much money\n"
+      }
+    ]
+  },
+  "Status Definitions": {
+    "0": "new job",
+    "1": "applied",
+    "2": "recieved reply",
+    "3": "interviewing",
+    "4": "declined"
+  }
+}
