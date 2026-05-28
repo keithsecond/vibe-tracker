@@ -1,497 +1,740 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Job Tracker</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Job Application Tracker - Vibe Tracker</title>
 
-<style>
+  <style>
+    /* ========================================
+       RESET & BASE STYLES
+       ======================================== */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-body{
-font-family:Arial;
-margin:40px;
-background:#f5f5f5;
-color:#222;
-}
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      margin: 40px 20px;
+      background-color: #f5f5f5;
+      color: #222;
+      transition: background-color 0.3s, color 0.3s;
+    }
 
-.dark{
-background:#1e1e1e;
-color:#ddd;
-}
+    h1 {
+      margin-bottom: 20px;
+      font-size: 2.5em;
+    }
 
-.dark table{
-background:#2a2a2a;
-}
+    h3 {
+      margin-bottom: 10px;
+      font-size: 1.2em;
+    }
 
-.dark th{
-background:#333;
-}
+    /* ========================================
+       DARK MODE
+       ======================================== */
+    body.dark {
+      background-color: #1e1e1e;
+      color: #ddd;
+    }
 
-table{
-border-collapse:collapse;
-width:100%;
-margin-top:10px;
-}
+    body.dark table {
+      background-color: #2a2a2a;
+    }
 
-th,td{
-border:1px solid #ccc;
-padding:10px;
-}
+    body.dark th {
+      background-color: #333;
+    }
 
-tr:hover{
-cursor:pointer;
-}
+    body.dark .addJob {
+      background-color: #2a2a2a;
+      border-color: #444;
+    }
 
-/* STATUS COLORS */
+    body.dark .stats {
+      background-color: #2a2a2a;
+    }
 
-.status0{background:#d4edff;}
-.status1{background:#fff3cd;}
-.status2{background:#e2e3ff;}
-.status3{background:#d4edda;}
-.status4{background:#f8d7da;}
+    /* ========================================
+       CONTROLS & INPUTS
+       ======================================== */
+    .controls {
+      margin-bottom: 20px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
 
-.dark .status0{background:#264653;}
-.dark .status1{background:#6b5c00;}
-.dark .status2{background:#3a3a6b;}
-.dark .status3{background:#1f5c3a;}
-.dark .status4{background:#6b2c2c;}
+    #searchBox,
+    #siteFilter,
+    button,
+    input[type='text'],
+    input[type='date'],
+    select,
+    textarea {
+      padding: 8px 12px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: inherit;
+      background-color: #fff;
+      color: #222;
+      transition: border-color 0.2s;
+    }
 
-.badge{
-background:#007bff;
-color:white;
-padding:2px 6px;
-font-size:11px;
-border-radius:4px;
-margin-left:6px;
-}
+    body.dark #searchBox,
+    body.dark #siteFilter,
+    body.dark input[type='text'],
+    body.dark input[type='date'],
+    body.dark select,
+    body.dark textarea {
+      background-color: #333;
+      color: #ddd;
+      border-color: #555;
+    }
 
-textarea{
-width:100%;
-height:40px;
-}
+    #searchBox:focus,
+    #siteFilter:focus,
+    input[type='text']:focus,
+    input[type='date']:focus,
+    select:focus,
+    textarea:focus {
+      outline: none;
+      border-color: #007bff;
+      box-shadow: 0 0 4px rgba(0, 123, 255, 0.25);
+    }
 
-.controls{
-margin-bottom:15px;
-}
+    button {
+      background-color: #007bff;
+      color: white;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
 
-.stats{
-margin-bottom:15px;
-padding:10px;
-background:white;
-}
+    button:hover {
+      background-color: #0056b3;
+    }
 
-.dark .stats{
-background:#2a2a2a;
-}
+    button:active {
+      transform: scale(0.98);
+    }
 
-button{
-padding:6px 10px;
-margin-right:5px;
-}
+    /* ========================================
+       ADD JOB FORM
+       ======================================== */
+    .addJob {
+      background-color: white;
+      padding: 20px;
+      margin-bottom: 25px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
 
-.addJob{
-background:white;
-padding:15px;
-margin-bottom:20px;
-border:1px solid #ccc;
-}
+    .addJob form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
 
-.dark .addJob{
-background:#2a2a2a;
-}
+    .addJob input,
+    .addJob select {
+      max-width: 100%;
+    }
 
-</style>
+    .addJob label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .addJob input[type='checkbox'] {
+      cursor: pointer;
+      width: 18px;
+      height: 18px;
+    }
+
+    /* ========================================
+       STATS
+       ======================================== */
+    .stats {
+      margin-bottom: 20px;
+      padding: 15px;
+      background-color: white;
+      border-radius: 6px;
+      border-left: 4px solid #007bff;
+      font-weight: 500;
+    }
+
+    /* ========================================
+       TABLE
+       ======================================== */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      background-color: white;
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    th {
+      background-color: #f8f9fa;
+      font-weight: 600;
+      text-align: left;
+      padding: 12px;
+      border-bottom: 2px solid #dee2e6;
+    }
+
+    td {
+      padding: 12px;
+      border-bottom: 1px solid #dee2e6;
+    }
+
+    tbody tr {
+      transition: background-color 0.15s;
+      cursor: pointer;
+    }
+
+    tbody tr:hover {
+      background-color: #f8f9fa;
+    }
+
+    body.dark tbody tr:hover {
+      background-color: #333;
+    }
+
+    /* ========================================
+       STATUS COLORS
+       ======================================== */
+    .status0 {
+      background-color: #d4edff;
+    }
+
+    .status1 {
+      background-color: #fff3cd;
+    }
+
+    .status2 {
+      background-color: #e2e3ff;
+    }
+
+    .status3 {
+      background-color: #d4edda;
+    }
+
+    .status4 {
+      background-color: #f8d7da;
+    }
+
+    body.dark .status0 {
+      background-color: #264653;
+    }
+
+    body.dark .status1 {
+      background-color: #6b5c00;
+    }
+
+    body.dark .status2 {
+      background-color: #3a3a6b;
+    }
+
+    body.dark .status3 {
+      background-color: #1f5c3a;
+    }
+
+    body.dark .status4 {
+      background-color: #6b2c2c;
+    }
+
+    /* ========================================
+       BADGES & COMPONENTS
+       ======================================== */
+    .badge {
+      display: inline-block;
+      background-color: #007bff;
+      color: white;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 4px;
+      margin-left: 6px;
+      white-space: nowrap;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 50px;
+      font-family: inherit;
+    }
+
+    select {
+      cursor: pointer;
+      appearance: auto;
+    }
+
+    /* ========================================
+       RESPONSIVE DESIGN
+       ======================================== */
+    @media (max-width: 768px) {
+      body {
+        margin: 20px 10px;
+      }
+
+      h1 {
+        font-size: 1.8em;
+      }
+
+      .controls {
+        flex-direction: column;
+      }
+
+      .controls input,
+      .controls select,
+      .controls button {
+        width: 100%;
+      }
+
+      .addJob {
+        padding: 15px;
+      }
+
+      table {
+        font-size: 12px;
+      }
+
+      th,
+      td {
+        padding: 8px;
+      }
+
+      textarea {
+        min-height: 40px;
+      }
+    }
+  </style>
 </head>
 
 <body>
 
-<h1>Job Application Tracker</h1>
-
-<div class="controls">
-
-<input id="searchBox" placeholder="Search jobs...">
-
-<select id="siteFilter">
-<option value="">All Sites</option>
-</select>
-
-<button onclick="toggleDark()">Dark Mode</button>
-
-</div>
-
-<div class="addJob">
-
-<h3>Add Job</h3>
-
-<form id="jobForm">
-
-<select id="vendorSelect">
-<option value="">Select Vendor</option>
-</select>
-
-<label>
-<input type="checkbox" id="newVendorCheck">
-New Vendor / Employer
-</label>
-
-<br><br>
-
-<input id="newVendorName" placeholder="Vendor / Employer Name">
-
-<input id="vendorURL" placeholder="Vendor Base URL">
-
-<br><br>
-
-<input id="jobID" placeholder="Job ID">
-
-<input id="jobTitle" placeholder="Job Title">
-
-<input id="jobDate" type="date">
-
-<br><br>
-
-<button type="submit">Add Job</button>
-
-</form>
-
-</div>
-
-<div class="stats" id="stats"></div>
-
-<table id="jobTable">
-
-<thead>
-<tr>
-<th>Decline</th>
-<th>Site</th>
-<th>ID</th>
-<th>Title</th>
-<th>Status</th>
-<th>Notes</th>
-</tr>
-</thead>
-
-<tbody></tbody>
-
-</table>
-
-<script>
-
-const statusPriority={
-"2":0, // received reply
-"3":1, // interviewing
-"0":2, // new job
-"1":3, // applied
-"4":4  // declined
-}
-
-let statuses={}
-let allJobs=[]
-let selectedJob=null
-
-async function loadJobs(){
-
-const res=await fetch("/jobs")
-const data=await res.json()
-
-statuses=data["Status Definitions"]
-
-allJobs=[]
-
-for(const site in data){
-
-if(site==="Status Definitions") continue
-
-data[site].jobs.forEach(job=>{
-
-allJobs.push({
-site,
-url:data[site].URL,
-...job
-})
-
-})
-
-}
-
-populateSiteFilter()
-renderJobs()
-
-}
-
-function populateSiteFilter(){
-
-const filter=document.getElementById("siteFilter")
-
-const sites=[...new Set(allJobs.map(j=>j.site))]
-
-filter.innerHTML='<option value="">All Sites</option>'
-
-sites.forEach(site=>{
-
-const opt=document.createElement("option")
-opt.value=site
-opt.textContent=site
-
-filter.appendChild(opt)
-
-})
-
-}
-
-function renderJobs(){
-
-const tbody=document.querySelector("#jobTable tbody")
-
-tbody.innerHTML=""
-
-const search=document.getElementById("searchBox").value.toLowerCase()
-const siteFilter=document.getElementById("siteFilter").value
-
-let jobs=allJobs.filter(job=>{
-
-const matchSearch=
-job.title.toLowerCase().includes(search) ||
-job.id.includes(search)
-
-const matchSite=
-!siteFilter || job.site===siteFilter
-
-return matchSearch && matchSite
-
-})
-
-/* SORT newest date first */
-
-//jobs.sort((a,b)=> new Date(b.date) - new Date(a.date))
-
-jobs.sort((a,b)=>{
-
-/* SORT BY STATUS FIRST */
-
-const statusDiff =
-statusPriority[a.status] - statusPriority[b.status]
-
-if(statusDiff !== 0) return statusDiff
-
-/* THEN SORT BY DATE (NEWEST FIRST) */
-
-return new Date(b.date) - new Date(a.date)
-
-})
-
-updateStats(jobs)
-
-jobs.forEach(job=>{
-
-const row=document.createElement("tr")
-
-row.className="status"+job.status
-
-row.onclick=()=>{
-selectedJob=job
-
-if(job.link){
-window.open(job.link,"_blank")
-}else{
-console.warn("No job link found for:", job.id)
-}
-}
-
-let title=job.title
-
-if(job.status==="0"){
-title+=` <span class="badge">NEW</span>`
-}
-
-let options=""
-
-for(const key in statuses){
-
-options+=`
-<option value="${key}" ${job.status===key?"selected":""}>
-${statuses[key]}
-</option>
-`
-
-}
-
-row.innerHTML=`
-
-<td onclick="event.stopPropagation()">
-<input type="checkbox"
-${job.status==="4" ? "checked" : ""}
-onchange="declineJob('${job.site}','${job.id}', this.checked)">
-</td>
-
-<td>${job.site}</td>
-<td>${job.id}</td>
-<td>${title}</td>
-
-<td onclick="event.stopPropagation()">
-<select onchange="updateStatus('${job.site}','${job.id}',this.value)">
-${options}
-</select>
-</td>
-
-<td onclick="event.stopPropagation()">
-<textarea onchange="updateNotes('${job.site}','${job.id}',this.value)">${(job.notes||"").trim()}</textarea>
-</td>
-
-`
-
-tbody.appendChild(row)
-
-})
-
-}
-
-function updateStats(jobs){
-
-const counts={0:0,1:0,2:0,3:0,4:0}
-
-jobs.forEach(j=>counts[j.status]++)
-
-document.getElementById("stats").innerHTML=`
-
-New: ${counts[0]} |
-Applied: ${counts[1]} |
-Replies: ${counts[2]} |
-Interviewing: ${counts[3]} |
-Declined: ${counts[4]} |
-Total: ${jobs.length}
-
-`
-
-}
-
-async function updateStatus(site,id,status){
-
-await fetch("/updateStatus",{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({site,jobId:id,status})
-})
-
-loadJobs()
-
-}
-
-function declineJob(site,id,isChecked){
-
-if(isChecked){
-updateStatus(site,id,"4")
-}
-
-}
-
-async function updateNotes(site,id,notes){
-
-await fetch("/updateNotes",{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({site,jobId:id,notes})
-})
-
-}
-
-/* KEYBOARD SHORTCUTS 
-
-document.addEventListener("keydown",e=>{
-
-if(!selectedJob) return
-
-if(e.key==="a") updateStatus(selectedJob.site,selectedJob.id,"1")
-if(e.key==="i") updateStatus(selectedJob.site,selectedJob.id,"3")
-if(e.key==="d") updateStatus(selectedJob.site,selectedJob.id,"4")
-
-}) */
-
-/* DARK MODE */
-
-function toggleDark(){
-
-document.body.classList.toggle("dark")
-
-}
-
-/* SEARCH */
-
-document.getElementById("searchBox")
-.addEventListener("input",renderJobs)
-
-document.getElementById("siteFilter")
-.addEventListener("change",renderJobs)
-
-/* LOAD VENDORS */
-
-async function loadVendors(){
-
-const res=await fetch("/vendors")
-const vendors=await res.json()
-
-const select=document.getElementById("vendorSelect")
-
-select.innerHTML='<option value="">Select Vendor</option>'
-
-vendors.forEach(v=>{
-
-const opt=document.createElement("option")
-opt.value=v
-opt.textContent=v
-
-select.appendChild(opt)
-
-})
-
-}
-
-/* ADD JOB FORM */
-
-document.getElementById("jobForm")
-.addEventListener("submit", async e=>{
-
-e.preventDefault()
-
-const isNew=document.getElementById("newVendorCheck").checked
-
-const payload={
-
-vendor:isNew ? "NEW_VENDOR" : document.getElementById("vendorSelect").value,
-
-newVendor:document.getElementById("newVendorName").value,
-
-vendorURL:document.getElementById("vendorURL").value,
-
-id:document.getElementById("jobID").value,
-
-title:document.getElementById("jobTitle").value,
-
-date:document.getElementById("jobDate").value
-
-}
-
-await fetch("/addJob",{
-
-method:"POST",
-
-headers:{
-"Content-Type":"application/json"
-},
-
-body:JSON.stringify(payload)
-
-})
-
-document.getElementById("jobForm").reset()
-
-loadJobs()
-
-})
-
-loadJobs()
-loadVendors()
-
-</script>
+  <!-- ========== HEADER ========== -->
+  <h1>Job Application Tracker</h1>
+
+  <!-- ========== SEARCH & FILTERS ========== -->
+  <div class="controls">
+    <input
+      id="searchBox"
+      type="text"
+      placeholder="Search jobs by title or ID..."
+      autocomplete="off"
+    />
+
+    <select id="siteFilter">
+      <option value="">All Sites</option>
+    </select>
+
+    <button onclick="toggleDark()">🌙 Dark Mode</button>
+  </div>
+
+  <!-- ========== ADD JOB FORM ========== -->
+  <div class="addJob">
+    <h3>➕ Add Job</h3>
+
+    <form id="jobForm">
+      <!-- Vendor Selection -->
+      <select id="vendorSelect">
+        <option value="">Select Vendor / Employer</option>
+      </select>
+
+      <label>
+        <input type="checkbox" id="newVendorCheck" />
+        Add a New Vendor / Employer
+      </label>
+
+      <!-- New Vendor Fields (hidden by default) -->
+      <input
+        id="newVendorName"
+        type="text"
+        placeholder="Vendor / Employer Name"
+        style="display: none"
+      />
+
+      <input
+        id="vendorURL"
+        type="text"
+        placeholder="Vendor Base URL (e.g., https://example.com)"
+        style="display: none"
+      />
+
+      <!-- Job Details -->
+      <input
+        id="jobID"
+        type="text"
+        placeholder="Job ID"
+        required
+      />
+
+      <input
+        id="jobTitle"
+        type="text"
+        placeholder="Job Title"
+        required
+      />
+
+      <input
+        id="jobDate"
+        type="date"
+        required
+      />
+
+      <button type="submit">Submit Job</button>
+    </form>
+  </div>
+
+  <!-- ========== STATISTICS ========== -->
+  <div class="stats" id="stats"></div>
+
+  <!-- ========== JOBS TABLE ========== -->
+  <table id="jobTable">
+    <thead>
+      <tr>
+        <th>Decline</th>
+        <th>Site</th>
+        <th>ID</th>
+        <th>Title</th>
+        <th>Status</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <!-- ========== JAVASCRIPT ========== -->
+  <script>
+    // ========================================
+    // STATE & CONFIGURATION
+    // ========================================
+    const statusPriority = {
+      '2': 0, // received reply
+      '3': 1, // interviewing
+      '0': 2, // new job
+      '1': 3, // applied
+      '4': 4  // declined
+    };
+
+    let statuses = {};
+    let allJobs = [];
+    let selectedJob = null;
+
+    // ========================================
+    // CORE FUNCTIONS
+    // ========================================
+
+    /**
+     * Load all jobs from the server
+     */
+    async function loadJobs() {
+      try {
+        const res = await fetch('/jobs');
+        const data = await res.json();
+
+        statuses = data['Status Definitions'] || {};
+        allJobs = [];
+
+        // Extract jobs from all vendors
+        for (const site in data) {
+          if (site === 'Status Definitions') continue;
+
+          const vendor = data[site];
+          if (vendor.jobs && Array.isArray(vendor.jobs)) {
+            vendor.jobs.forEach(job => {
+              allJobs.push({
+                site,
+                url: vendor.URL,
+                ...job
+              });
+            });
+          }
+        }
+
+        populateSiteFilter();
+        renderJobs();
+      } catch (error) {
+        console.error('Error loading jobs:', error);
+      }
+    }
+
+    /**
+     * Populate the site filter dropdown
+     */
+    function populateSiteFilter() {
+      const filter = document.getElementById('siteFilter');
+      const sites = [...new Set(allJobs.map(j => j.site))];
+
+      filter.innerHTML = '<option value="">All Sites</option>';
+      sites.forEach(site => {
+        const option = document.createElement('option');
+        option.value = site;
+        option.textContent = site;
+        filter.appendChild(option);
+      });
+    }
+
+    /**
+     * Render the jobs table with filtering and sorting
+     */
+    function renderJobs() {
+      const tbody = document.querySelector('#jobTable tbody');
+      tbody.innerHTML = '';
+
+      const searchQuery = document.getElementById('searchBox').value.toLowerCase();
+      const siteFilter = document.getElementById('siteFilter').value;
+
+      // Filter jobs based on search and site
+      let filteredJobs = allJobs.filter(job => {
+        const matchSearch =
+          job.title.toLowerCase().includes(searchQuery) ||
+          job.id.toString().includes(searchQuery);
+
+        const matchSite = !siteFilter || job.site === siteFilter;
+
+        return matchSearch && matchSite;
+      });
+
+      // Sort by status priority, then by date (newest first)
+      filteredJobs.sort((a, b) => {
+        const statusDiff = statusPriority[a.status] - statusPriority[b.status];
+        if (statusDiff !== 0) return statusDiff;
+        return new Date(b.date) - new Date(a.date);
+      });
+
+      updateStats(filteredJobs);
+
+      // Render each job as a table row
+      filteredJobs.forEach(job => {
+        const row = document.createElement('tr');
+        row.className = 'status' + job.status;
+
+        row.onclick = () => {
+          selectedJob = job;
+          if (job.link && job.link.trim()) {
+            window.open(job.link, '_blank');
+          } else {
+            console.warn('No job link found for:', job.id);
+          }
+        };
+
+        // Build title with NEW badge
+        let titleHTML = job.title;
+        if (job.status === '0') {
+          titleHTML += ' <span class="badge">NEW</span>';
+        }
+
+        // Build status dropdown options
+        let statusOptions = '';
+        for (const statusKey in statuses) {
+          const selected = job.status === statusKey ? 'selected' : '';
+          statusOptions += `<option value="${statusKey}" ${selected}>${statuses[statusKey]}</option>`;
+        }
+
+        // Set row content
+        row.innerHTML = `
+          <td onclick="event.stopPropagation()">
+            <input
+              type="checkbox"
+              ${job.status === '4' ? 'checked' : ''}
+              onchange="declineJob('${job.site}', '${job.id}', this.checked)"
+            />
+          </td>
+          <td>${job.site}</td>
+          <td>${job.id}</td>
+          <td>${titleHTML}</td>
+          <td onclick="event.stopPropagation()">
+            <select onchange="updateStatus('${job.site}', '${job.id}', this.value)">
+              ${statusOptions}
+            </select>
+          </td>
+          <td onclick="event.stopPropagation()">
+            <textarea onchange="updateNotes('${job.site}', '${job.id}', this.value)">${(job.notes || '').trim()}</textarea>
+          </td>
+        `;
+
+        tbody.appendChild(row);
+      });
+    }
+
+    /**
+     * Update and display statistics
+     */
+    function updateStats(jobs) {
+      const counts = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
+
+      jobs.forEach(job => {
+        counts[job.status]++;
+      });
+
+      document.getElementById('stats').innerHTML = `
+        <strong>Statistics:</strong> New: ${counts[0]} | Applied: ${counts[1]} | Replies: ${counts[2]} | Interviewing: ${counts[3]} | Declined: ${counts[4]} | <strong>Total: ${jobs.length}</strong>
+      `;
+    }
+
+    /**
+     * Update a job's status via API
+     */
+    async function updateStatus(site, jobId, status) {
+      try {
+        const response = await fetch('/updateStatus', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ site, jobId, status })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          loadJobs();
+        }
+      } catch (error) {
+        console.error('Error updating status:', error);
+      }
+    }
+
+    /**
+     * Decline a job (set status to 4)
+     */
+    function declineJob(site, jobId, isChecked) {
+      if (isChecked) {
+        updateStatus(site, jobId, '4');
+      }
+    }
+
+    /**
+     * Update a job's notes via API
+     */
+    async function updateNotes(site, jobId, notes) {
+      try {
+        await fetch('/updateNotes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ site, jobId, notes })
+        });
+      } catch (error) {
+        console.error('Error updating notes:', error);
+      }
+    }
+
+    /**
+     * Toggle dark mode
+     */
+    function toggleDark() {
+      document.body.classList.toggle('dark');
+      localStorage.setItem('darkMode', document.body.classList.contains('dark'));
+    }
+
+    /**
+     * Load vendors from server and populate dropdown
+     */
+    async function loadVendors() {
+      try {
+        const res = await fetch('/vendors');
+        const vendors = await res.json();
+
+        const select = document.getElementById('vendorSelect');
+        select.innerHTML = '<option value="">Select Vendor / Employer</option>';
+
+        vendors.forEach(vendor => {
+          const option = document.createElement('option');
+          option.value = vendor;
+          option.textContent = vendor;
+          select.appendChild(option);
+        });
+      } catch (error) {
+        console.error('Error loading vendors:', error);
+      }
+    }
+
+    // ========================================
+    // EVENT LISTENERS
+    // ========================================
+
+    /**
+     * Search and filter event listeners
+     */
+    document.getElementById('searchBox').addEventListener('input', renderJobs);
+    document.getElementById('siteFilter').addEventListener('change', renderJobs);
+
+    /**
+     * New vendor checkbox toggle
+     */
+    document.getElementById('newVendorCheck').addEventListener('change', (e) => {
+      document.getElementById('newVendorName').style.display = e.target.checked ? 'block' : 'none';
+      document.getElementById('vendorURL').style.display = e.target.checked ? 'block' : 'none';
+      document.getElementById('vendorSelect').style.display = e.target.checked ? 'none' : 'block';
+    });
+
+    /**
+     * Add job form submission
+     */
+    document.getElementById('jobForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const isNewVendor = document.getElementById('newVendorCheck').checked;
+
+      const payload = {
+        vendor: isNewVendor ? 'NEW_VENDOR' : document.getElementById('vendorSelect').value,
+        newVendor: document.getElementById('newVendorName').value,
+        vendorURL: document.getElementById('vendorURL').value,
+        id: document.getElementById('jobID').value,
+        title: document.getElementById('jobTitle').value,
+        date: document.getElementById('jobDate').value
+      };
+
+      try {
+        const response = await fetch('/addJob', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          document.getElementById('jobForm').reset();
+          loadJobs();
+          loadVendors();
+        } else {
+          alert(`Error: ${result.message}`);
+        }
+      } catch (error) {
+        console.error('Error adding job:', error);
+        alert('Failed to add job. Check console for details.');
+      }
+    });
+
+    // ========================================
+    // INITIALIZATION
+    // ========================================
+
+    /**
+     * Load dark mode preference from localStorage
+     */
+    if (localStorage.getItem('darkMode') === 'true') {
+      document.body.classList.add('dark');
+    }
+
+    /**
+     * Initial data load
+     */
+    loadJobs();
+    loadVendors();
+  </script>
 
 </body>
 </html>

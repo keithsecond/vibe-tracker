@@ -1,4 +1,20 @@
 {
+  "name": "vibe-tracker",
+  "version": "1.0.0",
+  "description": "Job application tracker app for employment search automation",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "job",
+    "tracker",
+    "application",
+    "employment"
+  ],
+  "author": "keithsecond",
+  "license": "MIT",
   "dependencies": {
     "express": "^5.2.1"
   }
