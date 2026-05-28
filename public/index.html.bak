@@ -161,7 +161,6 @@ New Vendor / Employer
 
 <thead>
 <tr>
-<th>Decline</th>
 <th>Site</th>
 <th>ID</th>
 <th>Title</th>
@@ -317,12 +316,6 @@ ${statuses[key]}
 
 row.innerHTML=`
 
-<td onclick="event.stopPropagation()">
-<input type="checkbox"
-${job.status==="4" ? "checked" : ""}
-onchange="declineJob('${job.site}','${job.id}', this.checked)">
-</td>
-
 <td>${job.site}</td>
 <td>${job.id}</td>
 <td>${title}</td>
@@ -334,7 +327,7 @@ ${options}
 </td>
 
 <td onclick="event.stopPropagation()">
-<textarea onchange="updateNotes('${job.site}','${job.id}',this.value)">${(job.notes||"").trim()}</textarea>
+<textarea onchange="updateNotes('${job.site}','${job.id}',this.value)">${job.notes||""}</textarea>
 </td>
 
 `
@@ -373,14 +366,6 @@ body:JSON.stringify({site,jobId:id,status})
 })
 
 loadJobs()
-
-}
-
-function declineJob(site,id,isChecked){
-
-if(isChecked){
-updateStatus(site,id,"4")
-}
 
 }
 

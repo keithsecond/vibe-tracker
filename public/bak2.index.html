@@ -88,17 +88,6 @@ padding:6px 10px;
 margin-right:5px;
 }
 
-.addJob{
-background:white;
-padding:15px;
-margin-bottom:20px;
-border:1px solid #ccc;
-}
-
-.dark .addJob{
-background:#2a2a2a;
-}
-
 </style>
 </head>
 
@@ -118,50 +107,12 @@ background:#2a2a2a;
 
 </div>
 
-<div class="addJob">
-
-<h3>Add Job</h3>
-
-<form id="jobForm">
-
-<select id="vendorSelect">
-<option value="">Select Vendor</option>
-</select>
-
-<label>
-<input type="checkbox" id="newVendorCheck">
-New Vendor / Employer
-</label>
-
-<br><br>
-
-<input id="newVendorName" placeholder="Vendor / Employer Name">
-
-<input id="vendorURL" placeholder="Vendor Base URL">
-
-<br><br>
-
-<input id="jobID" placeholder="Job ID">
-
-<input id="jobTitle" placeholder="Job Title">
-
-<input id="jobDate" type="date">
-
-<br><br>
-
-<button type="submit">Add Job</button>
-
-</form>
-
-</div>
-
 <div class="stats" id="stats"></div>
 
 <table id="jobTable">
 
 <thead>
 <tr>
-<th>Decline</th>
 <th>Site</th>
 <th>ID</th>
 <th>Title</th>
@@ -177,12 +128,12 @@ New Vendor / Employer
 <script>
 
 const statusPriority={
-"2":0, // received reply
-"3":1, // interviewing
-"0":2, // new job
-"1":3, // applied
-"4":4  // declined
-}
+"3":0,
+"1":1,
+"2":2,
+"0":3,
+"4":4
+};
 
 let statuses={}
 let allJobs=[]
@@ -262,22 +213,7 @@ return matchSearch && matchSite
 
 /* SORT newest date first */
 
-//jobs.sort((a,b)=> new Date(b.date) - new Date(a.date))
-
-jobs.sort((a,b)=>{
-
-/* SORT BY STATUS FIRST */
-
-const statusDiff =
-statusPriority[a.status] - statusPriority[b.status]
-
-if(statusDiff !== 0) return statusDiff
-
-/* THEN SORT BY DATE (NEWEST FIRST) */
-
-return new Date(b.date) - new Date(a.date)
-
-})
+jobs.sort((a,b)=> new Date(b.date) - new Date(a.date))
 
 updateStats(jobs)
 
@@ -289,12 +225,7 @@ row.className="status"+job.status
 
 row.onclick=()=>{
 selectedJob=job
-
-if(job.link){
-window.open(job.link,"_blank")
-}else{
-console.warn("No job link found for:", job.id)
-}
+window.open(job.url+job.id,"_blank")
 }
 
 let title=job.title
@@ -317,12 +248,6 @@ ${statuses[key]}
 
 row.innerHTML=`
 
-<td onclick="event.stopPropagation()">
-<input type="checkbox"
-${job.status==="4" ? "checked" : ""}
-onchange="declineJob('${job.site}','${job.id}', this.checked)">
-</td>
-
 <td>${job.site}</td>
 <td>${job.id}</td>
 <td>${title}</td>
@@ -334,7 +259,9 @@ ${options}
 </td>
 
 <td onclick="event.stopPropagation()">
-<textarea onchange="updateNotes('${job.site}','${job.id}',this.value)">${(job.notes||"").trim()}</textarea>
+<textarea onchange="updateNotes('${job.site}','${job.id}',this.value)">
+${job.notes||""}
+</textarea>
 </td>
 
 `
@@ -376,14 +303,6 @@ loadJobs()
 
 }
 
-function declineJob(site,id,isChecked){
-
-if(isChecked){
-updateStatus(site,id,"4")
-}
-
-}
-
 async function updateNotes(site,id,notes){
 
 await fetch("/updateNotes",{
@@ -394,7 +313,7 @@ body:JSON.stringify({site,jobId:id,notes})
 
 }
 
-/* KEYBOARD SHORTCUTS 
+/* KEYBOARD SHORTCUTS */
 
 document.addEventListener("keydown",e=>{
 
@@ -404,7 +323,7 @@ if(e.key==="a") updateStatus(selectedJob.site,selectedJob.id,"1")
 if(e.key==="i") updateStatus(selectedJob.site,selectedJob.id,"3")
 if(e.key==="d") updateStatus(selectedJob.site,selectedJob.id,"4")
 
-}) */
+})
 
 /* DARK MODE */
 
@@ -422,74 +341,7 @@ document.getElementById("searchBox")
 document.getElementById("siteFilter")
 .addEventListener("change",renderJobs)
 
-/* LOAD VENDORS */
-
-async function loadVendors(){
-
-const res=await fetch("/vendors")
-const vendors=await res.json()
-
-const select=document.getElementById("vendorSelect")
-
-select.innerHTML='<option value="">Select Vendor</option>'
-
-vendors.forEach(v=>{
-
-const opt=document.createElement("option")
-opt.value=v
-opt.textContent=v
-
-select.appendChild(opt)
-
-})
-
-}
-
-/* ADD JOB FORM */
-
-document.getElementById("jobForm")
-.addEventListener("submit", async e=>{
-
-e.preventDefault()
-
-const isNew=document.getElementById("newVendorCheck").checked
-
-const payload={
-
-vendor:isNew ? "NEW_VENDOR" : document.getElementById("vendorSelect").value,
-
-newVendor:document.getElementById("newVendorName").value,
-
-vendorURL:document.getElementById("vendorURL").value,
-
-id:document.getElementById("jobID").value,
-
-title:document.getElementById("jobTitle").value,
-
-date:document.getElementById("jobDate").value
-
-}
-
-await fetch("/addJob",{
-
-method:"POST",
-
-headers:{
-"Content-Type":"application/json"
-},
-
-body:JSON.stringify(payload)
-
-})
-
-document.getElementById("jobForm").reset()
-
 loadJobs()
-
-})
-
-loadJobs()
-loadVendors()
 
 </script>
 

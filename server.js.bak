@@ -39,16 +39,7 @@ res.json(vendors)
 
 app.post("/addJob",(req,res)=>{
 
-data[vendorKey].jobs.push({
-
-id,
-title,
-status: "0",
-date,
-notes: "",
-link: link || ""
-
-})
+let { vendor, newVendor, vendorURL, id, title, date } = req.body
 
 const data = JSON.parse(fs.readFileSync(filePath))
 
