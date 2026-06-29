@@ -9,6 +9,7 @@ const PORT = 3000;
 // NOTE: Change this path based on your data source
 const filePath = path.join(__dirname, '../prospects/test-data/jobResults.json');
 // const filePath = path.join(__dirname, 'jobs.json');
+const descriptionDir = path.join(__dirname, '../prospects/test-data/description');
 
 // Middleware
 app.use(express.json());
@@ -141,6 +142,21 @@ app.post('/updateStatus', (req, res) => {
     if (job) {
       job.status = status;
       fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+
+      // Declined: remove the matching job's description from prospects-data
+      if (status === '4') {
+        const descriptionPath = path.join(descriptionDir, `${site}.description.json`);
+        if (fs.existsSync(descriptionPath)) {
+          const descriptionData = JSON.parse(fs.readFileSync(descriptionPath, 'utf8'));
+          if (descriptionData[site] && Array.isArray(descriptionData[site].jobs)) {
+            descriptionData[site].jobs = descriptionData[site].jobs.filter(
+              j => j['URL entity'] !== jobId
+            );
+            fs.writeFileSync(descriptionPath, JSON.stringify(descriptionData, null, 2));
+          }
+        }
+      }
+
       res.json({ success: true });
     } else {
       res.json({ success: false, message: 'Job not found' });
