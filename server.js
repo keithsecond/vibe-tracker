@@ -143,11 +143,17 @@ app.post('/updateStatus', (req, res) => {
       job.status = status;
       fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 
-      // Declined: remove the org's description file from prospects-data
+      // Declined: remove the matching job's description from prospects-data
       if (status === '4') {
         const descriptionPath = path.join(descriptionDir, `${site}.description.json`);
         if (fs.existsSync(descriptionPath)) {
-          fs.unlinkSync(descriptionPath);
+          const descriptionData = JSON.parse(fs.readFileSync(descriptionPath, 'utf8'));
+          if (descriptionData[site] && Array.isArray(descriptionData[site].jobs)) {
+            descriptionData[site].jobs = descriptionData[site].jobs.filter(
+              j => j['URL entity'] !== jobId
+            );
+            fs.writeFileSync(descriptionPath, JSON.stringify(descriptionData, null, 2));
+          }
         }
       }
 
