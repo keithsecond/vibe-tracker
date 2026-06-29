@@ -1,6 +1,8 @@
 # Vibe-Tracker
 
-Vibe coded job tracker app for self coded employment search playwright suite: [Prospects](https://github.com/keithsecond/prospects)
+Vibe coded job tracker app for 
+1. Employment search playwright suite: [Prospects](https://github.com/keithsecond/prospects)
+2. Job Evaluator AI bridge: [career-ops](https://github.com/keithsecond/career-ops)
 
 ![Project Screenshot](assets/interface.png)
 
