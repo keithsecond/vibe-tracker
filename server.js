@@ -10,10 +10,41 @@ const PORT = 3000;
 const filePath = path.join(__dirname, '../prospects/test-data/jobResults.json');
 // const filePath = path.join(__dirname, 'jobs.json');
 const descriptionDir = path.join(__dirname, '../prospects/test-data/description');
+const draftSitesPath = path.join(__dirname, '../prospects/test-data/draft.sites.json');
+const sitesPath = path.join(__dirname, '../prospects/test-data/sites.json');
 
 // Middleware
 app.use(express.json());
 app.use(express.static('public'));
+
+// ============================================
+// HELPERS
+// ============================================
+
+const CATEGORY_PREFIX = {
+  'Private': 'P',
+  'Public': 'I',
+  'Universities': 'U',
+  'Sites': 'S',
+  'Recruiters': 'R',
+  'Employers': 'E'
+};
+
+function generateNextSiteId(category, entries) {
+  const prefix = CATEGORY_PREFIX[category];
+  if (!prefix) throw new Error(`Unknown category: ${category}`);
+
+  const firstMatch = entries.find(e => e.id && e.id.startsWith(prefix));
+  const padWidth = firstMatch ? firstMatch.id.slice(prefix.length).length : 3;
+
+  const nums = entries
+    .filter(e => e.id && e.id.startsWith(prefix))
+    .map(e => parseInt(e.id.slice(prefix.length), 10))
+    .filter(n => !isNaN(n));
+
+  const maxNum = nums.length > 0 ? Math.max(...nums) : 0;
+  return prefix + String(maxNum + 1).padStart(padWidth, '0');
+}
 
 // ============================================
 // GET ENDPOINTS
@@ -43,6 +74,19 @@ app.get('/vendors', (req, res) => {
     res.json(vendors);
   } catch (error) {
     res.status(500).json({ error: 'Failed to load vendors' });
+  }
+});
+
+/**
+ * GET /draftSites
+ * Fetch all pending entries from draft.sites.json
+ */
+app.get('/draftSites', (req, res) => {
+  try {
+    const data = JSON.parse(fs.readFileSync(draftSitesPath, 'utf8'));
+    res.json(data.Draft || []);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to load draft sites' });
   }
 });
 
@@ -194,6 +238,76 @@ app.post('/updateNotes', (req, res) => {
     } else {
       res.json({ success: false, message: 'Job not found' });
     }
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /promoteDraftSite
+ * Move a draft entry into a target category in sites.json.
+ * Body: { draftId, category }
+ */
+app.post('/promoteDraftSite', (req, res) => {
+  try {
+    const { draftId, category } = req.body;
+
+    if (!draftId || !category) {
+      return res.json({ success: false, message: 'Missing required fields: draftId, category' });
+    }
+    if (!CATEGORY_PREFIX[category]) {
+      return res.json({ success: false, message: 'Invalid category' });
+    }
+
+    const draftData = JSON.parse(fs.readFileSync(draftSitesPath, 'utf8'));
+    const sitesData = JSON.parse(fs.readFileSync(sitesPath, 'utf8'));
+
+    const draftIndex = draftData.Draft.findIndex(e => e.id === draftId);
+    if (draftIndex === -1) {
+      return res.json({ success: false, message: 'Draft entry not found' });
+    }
+
+    const entry = draftData.Draft[draftIndex];
+    const targetArray = sitesData[category] || [];
+    const newId = generateNextSiteId(category, targetArray);
+
+    draftData.Draft.splice(draftIndex, 1);
+    if (!sitesData[category]) sitesData[category] = [];
+    sitesData[category].push({ id: newId, org: entry.org, URL: entry.URL, Provider: entry.Provider });
+
+    fs.writeFileSync(draftSitesPath, JSON.stringify(draftData, null, 2));
+    fs.writeFileSync(sitesPath, JSON.stringify(sitesData, null, 4));
+
+    res.json({ success: true, newId });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /dismissDraftSite
+ * Remove a draft entry without promoting it to sites.json.
+ * Body: { draftId }
+ */
+app.post('/dismissDraftSite', (req, res) => {
+  try {
+    const { draftId } = req.body;
+
+    if (!draftId) {
+      return res.json({ success: false, message: 'Missing required field: draftId' });
+    }
+
+    const draftData = JSON.parse(fs.readFileSync(draftSitesPath, 'utf8'));
+    const draftIndex = draftData.Draft.findIndex(e => e.id === draftId);
+
+    if (draftIndex === -1) {
+      return res.json({ success: false, message: 'Draft entry not found' });
+    }
+
+    draftData.Draft.splice(draftIndex, 1);
+    fs.writeFileSync(draftSitesPath, JSON.stringify(draftData, null, 2));
+
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
