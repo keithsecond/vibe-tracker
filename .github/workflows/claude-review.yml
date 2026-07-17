@@ -1,0 +1,114 @@
+name: Claude review & auto-heal
+
+# Layered on top of the deterministic "PR CI" workflow. Two behaviors:
+#   1. review    — on a `claude-review` label or an `@claude` mention, review the
+#                  PR diff and suggest concrete Playwright tests as a PR review.
+#   2. auto-heal — after "PR CI" fails, triage test-vs-code, push a minimal fix
+#                  commit (prefixed "[auto-heal]"), capped at 3 attempts. Never merges.
+#
+# Prerequisites (repo settings):
+#   - Secret ANTHROPIC_API_KEY.
+#   - The Claude GitHub App installed on the repo (for the action to act as a bot).
+#   - "Allow GitHub Actions to create and approve pull requests" is NOT required;
+#     merges stay human-gated on purpose.
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request:
+    types: [labeled]
+  workflow_run:
+    workflows: ["PR CI"]
+    types: [completed]
+
+jobs:
+  review:
+    name: Suggest tests / review
+    if: >
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request' && github.event.label.name == 'claude-review')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            You are reviewing a pull request for the vibe-tracker app.
+            If the triggering comment asked something specific, address that first.
+            Otherwise, review the diff for missing integration-test coverage:
+            - Identify changed behavior in server.js or public/index.html that is
+              not exercised by the @smoke/@regression Playwright suites in test/.
+            - Post concrete, ready-to-paste Playwright tests (matching the style in
+              test/regression.spec.js, using test/helpers/data.js) as a PR review.
+            Suggest only; do not modify code in this job.
+          claude_args: '--allowedTools "Read,Grep,Glob,Bash(npm:*),mcp__github__*"'
+
+  auto-heal:
+    name: Auto-heal failing CI
+    if: >
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_branch }}
+
+      - name: Enforce bounded retries (max 3)
+        id: guard
+        run: |
+          git fetch origin main --quiet || true
+          attempts="$(git log --pretty=%s origin/main..HEAD | grep -c '\[auto-heal\]' || true)"
+          echo "attempts=$attempts"
+          echo "attempts=$attempts" >> "$GITHUB_OUTPUT"
+          if [ "$attempts" -ge 3 ]; then
+            echo "stop=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "stop=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Auto-heal with Claude
+        if: steps.guard.outputs.stop == 'false'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            The "PR CI" workflow failed on branch
+            "${{ github.event.workflow_run.head_branch }}" (attempt
+            ${{ steps.guard.outputs.attempts }} of 3).
+
+            1. Run `npm ci`, then `npm run test:smoke` and `npm run test:regression`
+               to reproduce the failures.
+            2. For each failure decide whether the TEST is wrong (assertion no longer
+               matches intended behavior) or the CODE is wrong (a real regression).
+            3. Apply the minimal fix in the appropriate place. Keep it scoped to the
+               failure — no refactors.
+            4. Commit with a message prefixed "[auto-heal]" and push to the branch.
+            5. Post a PR comment summarizing each failure, your test-vs-code verdict,
+               and what you changed. Do NOT merge the PR.
+          claude_args: '--allowedTools "Read,Edit,Write,Grep,Glob,Bash(npm:*),Bash(git:*),mcp__github__*"'
+
+      - name: Stop at retry cap
+        if: steps.guard.outputs.stop == 'true'
+        run: |
+          echo "::warning::Reached the auto-heal retry cap (3 attempts) on ${{ github.event.workflow_run.head_branch }}. Leaving for human review."
