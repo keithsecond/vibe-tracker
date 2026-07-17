@@ -3,15 +3,17 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Path to job data file
-// NOTE: Change this path based on your data source
-const filePath = path.join(__dirname, '../prospects/test-data/jobResults.json');
+// NOTE: Override DATA_FILE / DESCRIPTION_DIR to point at a different data source
+// (e.g. disposable fixtures during tests). Defaults preserve production behavior.
+const filePath = process.env.DATA_FILE || path.join(__dirname, '../prospects/test-data/jobResults.json');
 // const filePath = path.join(__dirname, 'jobs.json');
-const descriptionDir = path.join(__dirname, '../prospects/test-data/description');
-const draftSitesPath = path.join(__dirname, '../prospects/test-data/draft.sites.json');
-const sitesPath = path.join(__dirname, '../prospects/test-data/sites.json');
+const descriptionDir = process.env.DESCRIPTION_DIR || path.join(__dirname, '../prospects/test-data/description');
+const draftSitesPath = process.env.DRAFT_SITES_FILE || path.join(__dirname, '../prospects/test-data/draft.sites.json');
+const sitesPath = process.env.SITES_FILE || path.join(__dirname, '../prospects/test-data/sites.json');
+
 
 // Middleware
 app.use(express.json());
