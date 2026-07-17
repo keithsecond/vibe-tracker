@@ -7,7 +7,9 @@ name: Claude review & auto-heal
 #                  commit (prefixed "[auto-heal]"), capped at 3 attempts. Never merges.
 #
 # Prerequisites (repo settings):
-#   - Secret ANTHROPIC_API_KEY.
+#   - Secret CLAUDE_CODE_OAUTH_TOKEN — a Claude Pro/Max subscription token from
+#     `claude setup-token`. (Alternatively use an API key via ANTHROPIC_API_KEY and
+#     swap the `claude_code_oauth_token` inputs below for `anthropic_api_key`.)
 #   - The Claude GitHub App installed on the repo (for the action to act as a bot).
 #   - "Allow GitHub Actions to create and approve pull requests" is NOT required;
 #     merges stay human-gated on purpose.
@@ -42,7 +44,7 @@ jobs:
 
       - uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
             You are reviewing a pull request for the vibe-tracker app.
@@ -90,7 +92,7 @@ jobs:
         if: steps.guard.outputs.stop == 'false'
         uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
             The "PR CI" workflow failed on branch

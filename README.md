@@ -50,6 +50,7 @@ disposable temp dir and points the server at it via `DATA_FILE` /
 - **`.github/workflows/pr.yml`** runs both suites on every PR and flags PRs
   that change `server.js` or `public/index.html` without updating a test
   (bypass with the `skip-coverage-gate` label).
-- **`.github/workflows/claude-review.yml`** (requires an `ANTHROPIC_API_KEY`
-  secret) suggests tests on a `claude-review` label / `@claude` mention, and
-  auto-heals failing CI with bounded, human-gated fix commits.
+- **`.github/workflows/claude-review.yml`** (requires a `CLAUDE_CODE_OAUTH_TOKEN`
+  secret from `claude setup-token`, or an API key) suggests tests on a
+  `claude-review` label / `@claude` mention, and auto-heals failing CI with
+  bounded, human-gated fix commits.
