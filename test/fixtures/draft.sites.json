@@ -1,0 +1,6 @@
+{
+  "Draft": [
+    { "id": "D1", "org": "NewCo", "URL": "https://newco.example.com/careers", "Provider": "Greenhouse" },
+    { "id": "D2", "org": "Beta Inc", "URL": "https://beta.example.com/jobs", "Provider": "Lever" }
+  ]
+}

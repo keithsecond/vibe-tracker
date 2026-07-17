@@ -4,7 +4,7 @@
 // Run with: npm run test:regression
 
 const { test, expect } = require('@playwright/test');
-const { resetData, readData, readDescription } = require('./helpers/data');
+const { resetData, readData, readDescription, readDraftSites, readSites } = require('./helpers/data');
 
 test.describe('@regression', () => {
   test.beforeEach(() => {
@@ -152,5 +152,69 @@ test.describe('@regression', () => {
     await expect(page.locator('body')).toHaveClass(/dark/);
     await page.reload();
     await expect(page.locator('body')).toHaveClass(/dark/);
+  });
+
+  // ----- Draft sites -----
+
+  test('GET /draftSites responds with the pending draft entries', async ({ request }) => {
+    const res = await request.get('/draftSites');
+    expect(res.status()).toBe(200);
+    const drafts = await res.json();
+    expect(drafts.map((d) => d.id)).toEqual(['D1', 'D2']);
+  });
+
+  test('draft sites section lists drafts and reflects the count badge', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#draftCount')).toHaveText('2');
+    await page.getByRole('button', { name: /Draft Sites/ }).click();
+    const rows = page.locator('#draftTable tbody tr');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first()).toContainText('NewCo');
+  });
+
+  test('promoting a draft site moves it into sites.json under the chosen category', async ({ page }) => {
+    await page.goto('/');
+    // Wait for the page's own background loadDraftSites() to settle before
+    // toggling the panel, so its fetch doesn't race the one triggered below.
+    await expect(page.locator('#draftCount')).toHaveText('2');
+    await page.getByRole('button', { name: /Draft Sites/ }).click();
+    // toggleDraftSection() re-fetches and re-renders the panel; wait for that
+    // render to land before acting, so it can't overwrite the post-promote one.
+    await expect(page.locator('#draftTable tbody tr')).toHaveCount(2);
+    await page.locator('#cat-D1').selectOption('Private');
+    await page.locator('#draftTable tbody tr', { hasText: 'NewCo' }).getByRole('button', { name: 'Promote' }).click();
+
+    await expect(page.locator('#draftTable tbody tr')).toHaveCount(1);
+    await expect
+      .poll(() => readDraftSites().Draft.map((d) => d.id))
+      .toEqual(['D2']);
+    await expect
+      .poll(() => readSites().Private.map((s) => s.id))
+      .toEqual(['P001', 'P002']);
+    expect(readSites().Private[1]).toMatchObject({ org: 'NewCo', URL: 'https://newco.example.com/careers', Provider: 'Greenhouse' });
+  });
+
+  test('POST /promoteDraftSite rejects an invalid category', async ({ request }) => {
+    const res = await request.post('/promoteDraftSite', {
+      data: { draftId: 'D1', category: 'NotACategory' },
+    });
+    const body = await res.json();
+    expect(body.success).toBe(false);
+    expect(body.message).toMatch(/Invalid category/i);
+  });
+
+  test('dismissing a draft site removes it without promoting', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#draftCount')).toHaveText('2');
+    await page.getByRole('button', { name: /Draft Sites/ }).click();
+    await expect(page.locator('#draftTable tbody tr')).toHaveCount(2);
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.locator('#draftTable tbody tr', { hasText: 'Beta Inc' }).getByRole('button', { name: 'Dismiss' }).click();
+
+    await expect(page.locator('#draftTable tbody tr')).toHaveCount(1);
+    await expect
+      .poll(() => readDraftSites().Draft.map((d) => d.id))
+      .toEqual(['D1']);
+    expect(readSites().Private).toHaveLength(1); // unchanged
   });
 });

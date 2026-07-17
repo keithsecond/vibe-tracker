@@ -1,0 +1,5 @@
+{
+  "Private": [
+    { "id": "P001", "org": "Acme", "URL": "https://acme.example.com/", "Provider": "Greenhouse" }
+  ]
+}
