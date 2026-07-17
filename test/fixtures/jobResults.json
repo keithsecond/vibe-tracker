@@ -1,0 +1,53 @@
+{
+  "Status Definitions": {
+    "0": "new job",
+    "1": "applied",
+    "2": "recieved reply",
+    "3": "interviewing",
+    "4": "declined"
+  },
+  "Acme": {
+    "Site": "Acme",
+    "URL": "https://acme.example.com/careers/",
+    "jobs": [
+      {
+        "id": "A-1",
+        "title": "Automation Test Engineer",
+        "link": "https://acme.example.com/careers/A-1",
+        "status": "0",
+        "date": "2026-02-01",
+        "notes": "looks promising"
+      },
+      {
+        "id": "A-2",
+        "title": "Backend Developer",
+        "link": "https://acme.example.com/careers/A-2",
+        "status": "1",
+        "date": "2026-01-15",
+        "notes": ""
+      }
+    ]
+  },
+  "Globex": {
+    "Site": "Globex",
+    "URL": "https://globex.example.com/jobs/",
+    "jobs": [
+      {
+        "id": "G-100",
+        "title": "SDET",
+        "link": "https://globex.example.com/jobs/G-100",
+        "status": "2",
+        "date": "2026-03-01",
+        "notes": "recruiter replied"
+      },
+      {
+        "id": "G-200",
+        "title": "Platform Engineer",
+        "link": "https://globex.example.com/jobs/G-200",
+        "status": "3",
+        "date": "2026-03-10",
+        "notes": "onsite scheduled"
+      }
+    ]
+  }
+}
