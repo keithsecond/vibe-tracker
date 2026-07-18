@@ -1,0 +1,73 @@
+name: Claude issue auto-fix
+
+# Opt-in companion to "PR CI" and "Claude review & auto-heal". When a human labels
+# an issue `auto-fix`, Claude reads the issue, implements a minimal fix on a NEW
+# branch, adds a Playwright test that would have caught it, and opens a PR
+# ("Fixes #<n>"). It never merges — the fix routes back through "PR CI" + auto-heal
+# with a human merge gate. Gating on an explicit label (not every issue) keeps a
+# human in the loop and bounds cost.
+#
+# Prerequisites (repo settings):
+#   - Secret CLAUDE_CODE_OAUTH_TOKEN — a Claude Pro/Max subscription token.
+#   - Secrets AUTOHEAL_APP_ID + AUTOHEAL_APP_PRIVATE_KEY — a GitHub App installed on
+#     this repo with Contents: R/W, Pull requests: R/W, Issues: R/W. Using an App
+#     token (not GITHUB_TOKEN) is required so the fix PR's own "PR CI" actually runs.
+#   - A label named `auto-fix`.
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  auto-fix:
+    name: Open a fix PR from a labeled issue
+    if: ${{ github.event.label.name == 'auto-fix' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Mint a GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.AUTOHEAL_APP_ID }}
+          private-key: ${{ secrets.AUTOHEAL_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Fix the issue with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ steps.app-token.outputs.token }}
+          prompt: |
+            Issue #${{ github.event.issue.number }} was labeled `auto-fix`.
+
+            Title: ${{ github.event.issue.title }}
+
+            Body:
+            ${{ github.event.issue.body }}
+
+            Implement a fix:
+            1. Understand and reproduce the bug. Read the relevant code
+               (server.js, public/index.html, test/).
+            2. Create a NEW branch off the default branch (main), named
+               fix/issue-${{ github.event.issue.number }}.
+            3. Apply a MINIMAL, well-scoped fix — no unrelated refactors. If the code
+               the issue describes is not present on main yet (e.g. it lives in an
+               unmerged feature PR), stop and post a comment on the issue saying the
+               fix is blocked until that PR merges, rather than guessing.
+            4. Add or update a Playwright test under test/ that would have caught the
+               bug (match the style in test/regression.spec.js, using
+               test/helpers/data.js). Run `npm ci`, `npm run test:smoke`, and
+               `npm run test:regression` and confirm they pass.
+            5. Open a pull request from fix/issue-${{ github.event.issue.number }} into
+               main whose body starts with "Fixes #${{ github.event.issue.number }}"
+               and summarizes the fix and the test you added.
+            Do NOT push to main and do NOT merge the PR — leave it for human review.
+          claude_args: '--allowedTools "Read,Edit,Write,Grep,Glob,Bash(npm:*),Bash(git:*),mcp__github__*"'
