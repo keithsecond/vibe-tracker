@@ -284,6 +284,70 @@
     /* ========================================
        RESPONSIVE DESIGN
        ======================================== */
+    /* ========================================
+       DRAFT SITES SECTION
+       ======================================== */
+    #draftSection {
+      display: none;
+      margin-bottom: 25px;
+    }
+
+    .btn-promote {
+      background-color: #28a745;
+      color: white;
+      padding: 5px 10px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
+
+    .btn-promote:hover { background-color: #218838; }
+
+    .btn-dismiss {
+      background-color: #6c757d;
+      color: white;
+      padding: 5px 10px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      margin-left: 6px;
+      transition: background-color 0.2s;
+    }
+
+    .btn-dismiss:hover { background-color: #545b62; }
+
+    body.dark .btn-promote { background-color: #1e7e34; }
+    body.dark .btn-promote:hover { background-color: #28a745; }
+    body.dark .btn-dismiss { background-color: #495057; }
+    body.dark .btn-dismiss:hover { background-color: #6c757d; }
+
+    .draft-empty {
+      padding: 20px;
+      background-color: white;
+      border-radius: 6px;
+      border: 1px solid #dee2e6;
+      text-align: center;
+      color: #666;
+    }
+
+    body.dark .draft-empty {
+      background-color: #2a2a2a;
+      border-color: #444;
+      color: #aaa;
+    }
+
+    #draftTable td:nth-child(3) {
+      max-width: 280px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     @media (max-width: 768px) {
       body {
         margin: 20px 10px;
@@ -342,6 +406,7 @@
     </select>
 
     <button onclick="toggleDark()">🌙 Dark Mode</button>
+    <button onclick="toggleDraftSection()">Draft Sites <span id="draftCount" class="badge">0</span></button>
   </div>
 
   <!-- ========== ADD JOB FORM ========== -->
@@ -401,6 +466,12 @@
 
   <!-- ========== STATISTICS ========== -->
   <div class="stats" id="stats"></div>
+
+  <!-- ========== DRAFT SITES SECTION ========== -->
+  <div id="draftSection">
+    <h3>Draft Sites Review</h3>
+    <div id="draftContent"></div>
+  </div>
 
   <!-- ========== JOBS TABLE ========== -->
   <table id="jobTable">
@@ -661,6 +732,133 @@
     }
 
     // ========================================
+    // DRAFT SITES
+    // ========================================
+
+    const DRAFT_CATEGORIES = ['Private', 'Public', 'Universities', 'Sites', 'Recruiters', 'Employers'];
+
+    function toggleDraftSection() {
+      const section = document.getElementById('draftSection');
+      const isHidden = section.style.display === 'none' || section.style.display === '';
+      section.style.display = isHidden ? 'block' : 'none';
+      if (isHidden) loadDraftSites();
+    }
+
+    async function loadDraftSites() {
+      try {
+        const res = await fetch('/draftSites');
+        const drafts = await res.json();
+        renderDraftSites(drafts);
+      } catch (error) {
+        console.error('Error loading draft sites:', error);
+      }
+    }
+
+    function renderDraftSites(drafts) {
+      document.getElementById('draftCount').textContent = drafts.length;
+
+      const content = document.getElementById('draftContent');
+
+      if (drafts.length === 0) {
+        content.innerHTML = '<div class="draft-empty">No draft sites remaining.</div>';
+        return;
+      }
+
+      const categoryOptions = DRAFT_CATEGORIES
+        .map(c => `<option value="${c}">${c}</option>`)
+        .join('');
+
+      const rows = drafts.map(entry => `
+        <tr>
+          <td>${entry.id}</td>
+          <td>${entry.org}</td>
+          <td title="${entry.URL}">
+            <a href="${entry.URL}" target="_blank" rel="noopener">${entry.URL}</a>
+          </td>
+          <td>${entry.Provider}</td>
+          <td onclick="event.stopPropagation()">
+            <select id="cat-${entry.id}">
+              <option value="">-- Select --</option>
+              ${categoryOptions}
+            </select>
+          </td>
+          <td onclick="event.stopPropagation()">
+            <button class="btn-promote" onclick="promoteDraftSite('${entry.id}')">Promote</button>
+            <button class="btn-dismiss" onclick="dismissDraftSite('${entry.id}')">Dismiss</button>
+          </td>
+        </tr>
+      `).join('');
+
+      content.innerHTML = `
+        <table id="draftTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Org</th>
+              <th>URL</th>
+              <th>Provider</th>
+              <th>Category</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
+    async function promoteDraftSite(draftId) {
+      const categorySelect = document.getElementById(`cat-${draftId}`);
+      const category = categorySelect ? categorySelect.value : '';
+
+      if (!category) {
+        alert('Please select a category before promoting.');
+        return;
+      }
+
+      try {
+        const response = await fetch('/promoteDraftSite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ draftId, category })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          loadDraftSites();
+        } else {
+          alert(`Error: ${result.message}`);
+        }
+      } catch (error) {
+        console.error('Error promoting draft site:', error);
+        alert('Failed to promote site. Check console for details.');
+      }
+    }
+
+    async function dismissDraftSite(draftId) {
+      if (!confirm('Remove this draft entry permanently? This cannot be undone.')) return;
+
+      try {
+        const response = await fetch('/dismissDraftSite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ draftId })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          loadDraftSites();
+        } else {
+          alert(`Error: ${result.message}`);
+        }
+      } catch (error) {
+        console.error('Error dismissing draft site:', error);
+        alert('Failed to dismiss site. Check console for details.');
+      }
+    }
+
+    // ========================================
     // EVENT LISTENERS
     // ========================================
 
@@ -734,6 +932,7 @@
      */
     loadJobs();
     loadVendors();
+    loadDraftSites();
   </script>
 
 </body>
