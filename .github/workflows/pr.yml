@@ -42,8 +42,10 @@ jobs:
   coverage-gate:
     name: Test-coverage gate
     runs-on: ubuntu-latest
-    # Escape hatch: add the "skip-coverage-gate" label to a PR to bypass.
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-coverage-gate') }}
+    # Always runs (no job-level `if:`) and reports a conclusion, so it can safely be
+    # a *required* status check. The skip-coverage-gate label is honored inside the
+    # step by short-circuiting to success — a skipped required check would otherwise
+    # sit unfulfilled and block the merge, defeating the escape hatch.
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,7 +55,15 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # Escape hatch: add the "skip-coverage-gate" label to a PR to bypass.
+          BYPASS: ${{ contains(github.event.pull_request.labels.*.name, 'skip-coverage-gate') }}
         run: |
+          if [ "$BYPASS" = "true" ]; then
+            echo "### ⏭️ Test-coverage gate bypassed" >> "$GITHUB_STEP_SUMMARY"
+            echo "Skipped via the \`skip-coverage-gate\` label." >> "$GITHUB_STEP_SUMMARY"
+            echo "Bypassed via skip-coverage-gate label."
+            exit 0
+          fi
           changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
           echo "Changed files:"; echo "$changed"
           code_changed="$(echo "$changed" | grep -E '^(server\.js|public/index\.html)$' || true)"
