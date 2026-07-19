@@ -1,0 +1,20 @@
+{
+  "Globex": {
+    "jobs": [
+      {
+        "title": "SDET",
+        "JobID": "G-100",
+        "Department": "Quality Engineering",
+        "URL entity": "G-100",
+        "Description": "Own the automation framework and release-confidence tooling for Globex integrations."
+      },
+      {
+        "title": "Platform Engineer",
+        "JobID": "G-200",
+        "Department": "Engineering",
+        "URL entity": "G-200",
+        "Description": "Build and operate the internal developer platform."
+      }
+    ]
+  }
+}
