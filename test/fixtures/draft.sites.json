@@ -1,0 +1,16 @@
+{
+  "Draft": [
+    {
+      "id": "D-1",
+      "org": "Initrode",
+      "URL": "https://initrode.example.com/careers/",
+      "Provider": "Greenhouse"
+    },
+    {
+      "id": "D-2",
+      "org": "Umbrella",
+      "URL": "https://umbrella.example.com/jobs/",
+      "Provider": "Lever"
+    }
+  ]
+}

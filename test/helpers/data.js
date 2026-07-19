@@ -15,10 +15,14 @@ const path = require('path');
 const DATA_DIR = path.join(os.tmpdir(), 'vibe-tracker-test-data');
 const DATA_FILE = path.join(DATA_DIR, 'jobResults.json');
 const DESCRIPTION_DIR = path.join(DATA_DIR, 'description');
+const DRAFT_SITES_FILE = path.join(DATA_DIR, 'draft.sites.json');
+const SITES_FILE = path.join(DATA_DIR, 'sites.json');
 
 const FIXTURES_DIR = path.join(__dirname, '..', 'fixtures');
 const FIXTURE_DATA_FILE = path.join(FIXTURES_DIR, 'jobResults.json');
 const FIXTURE_DESCRIPTION_DIR = path.join(FIXTURES_DIR, 'description');
+const FIXTURE_DRAFT_SITES_FILE = path.join(FIXTURES_DIR, 'draft.sites.json');
+const FIXTURE_SITES_FILE = path.join(FIXTURES_DIR, 'sites.json');
 
 /** Copy the fixtures fresh into the disposable temp data dir. */
 function resetData() {
@@ -31,6 +35,8 @@ function resetData() {
       path.join(DESCRIPTION_DIR, name)
     );
   }
+  fs.copyFileSync(FIXTURE_DRAFT_SITES_FILE, DRAFT_SITES_FILE);
+  fs.copyFileSync(FIXTURE_SITES_FILE, SITES_FILE);
 }
 
 /** Read the current job-results data the server is operating on. */
@@ -45,11 +51,25 @@ function readDescription(site) {
   return JSON.parse(fs.readFileSync(p, 'utf8'));
 }
 
+/** Read the current draft.sites.json data the server is operating on. */
+function readDraftSites() {
+  return JSON.parse(fs.readFileSync(DRAFT_SITES_FILE, 'utf8')).Draft;
+}
+
+/** Read the current sites.json data the server is operating on. */
+function readSites() {
+  return JSON.parse(fs.readFileSync(SITES_FILE, 'utf8'));
+}
+
 module.exports = {
   DATA_DIR,
   DATA_FILE,
   DESCRIPTION_DIR,
+  DRAFT_SITES_FILE,
+  SITES_FILE,
   resetData,
   readData,
   readDescription,
+  readDraftSites,
+  readSites,
 };
