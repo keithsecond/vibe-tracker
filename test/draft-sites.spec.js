@@ -32,10 +32,6 @@ test.describe('@regression', () => {
     await page.goto('/');
     await expect(page.locator('#draftCount')).toHaveText('2');
     await page.getByRole('button', { name: /Draft Sites/ }).click();
-    // toggleDraftSection() re-fetches /draftSites and re-renders the table on
-    // every open; wait for that in-flight request to settle before acting on
-    // the row, otherwise the re-render can wipe out the selection below.
-    await page.waitForLoadState('networkidle');
     await page.selectOption('#cat-D-1', 'Private');
     await page.locator('tr', { hasText: 'Initrode' }).getByRole('button', { name: 'Promote' }).click();
 
@@ -47,6 +43,34 @@ test.describe('@regression', () => {
       URL: 'https://initrode.example.com/careers/',
       Provider: 'Greenhouse',
     });
+  });
+
+  test('opening the panel does not show an interactive table until the re-fetch resolves (regression for #7)', async ({ page }) => {
+    await page.route('**/draftSites', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await route.continue();
+    });
+
+    await page.goto('/');
+    await expect(page.locator('#draftCount')).toHaveText('2');
+
+    await page.getByRole('button', { name: /Draft Sites/ }).click();
+    // toggleDraftSection() re-fetches /draftSites on every open. Previously the
+    // panel was made visible synchronously, before that fetch resolved, so the
+    // stale-but-interactive table from the initial load was exposed while a
+    // re-render was in flight — a selection made in that window could be
+    // silently wiped out by the pending re-render. The panel must now stay
+    // hidden until the fetch (and re-render) has completed.
+    await expect(page.locator('#draftSection')).toBeHidden();
+    await expect(page.locator('#draftSection')).toBeVisible();
+
+    // Once visible, the table is stable: a selection made right away survives
+    // and promotion succeeds.
+    await page.selectOption('#cat-D-1', 'Private');
+    await page.locator('tr', { hasText: 'Initrode' }).getByRole('button', { name: 'Promote' }).click();
+
+    await expect(page.locator('#draftTable tbody tr')).toHaveCount(1);
+    await expect.poll(() => readSites().Private?.map((s) => s.id)).toEqual(['P001', 'P002']);
   });
 
   test('promoting without selecting a category alerts and makes no changes', async ({ page }) => {

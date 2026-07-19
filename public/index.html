@@ -737,11 +737,18 @@
 
     const DRAFT_CATEGORIES = ['Private', 'Public', 'Universities', 'Sites', 'Recruiters', 'Employers'];
 
-    function toggleDraftSection() {
+    async function toggleDraftSection() {
       const section = document.getElementById('draftSection');
       const isHidden = section.style.display === 'none' || section.style.display === '';
-      section.style.display = isHidden ? 'block' : 'none';
-      if (isHidden) loadDraftSites();
+      if (isHidden) {
+        // Await the re-fetch/re-render before revealing the panel, so users
+        // can't interact with (and lose selections in) a table that's about
+        // to be wholesale-replaced by an in-flight request.
+        await loadDraftSites();
+        section.style.display = 'block';
+      } else {
+        section.style.display = 'none';
+      }
     }
 
     async function loadDraftSites() {
