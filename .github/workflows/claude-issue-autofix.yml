@@ -63,8 +63,9 @@ jobs:
                unmerged feature PR), stop and post a comment on the issue saying the
                fix is blocked until that PR merges, rather than guessing.
             4. Add or update a Playwright test under test/ that would have caught the
-               bug (match the style in test/regression.spec.js, using
-               test/helpers/data.js). Run `npm ci`, `npm run test:smoke`, and
+               bug. Read test/TESTING.md first and follow its test-design rubric and
+               canonical data shapes (match the style in test/regression.spec.js,
+               using test/helpers/data.js). Run `npm ci`, `npm run test:smoke`, and
                `npm run test:regression` and confirm they pass.
             5. Open a pull request from fix/issue-${{ github.event.issue.number }} into
                main whose body starts with "Fixes #${{ github.event.issue.number }}"
