@@ -63,10 +63,14 @@ static fixtures, write directly to the exported `*_FILE` paths after `resetData(
 The server reads four data files owned by the **`keithsecond/prospects-data`**
 repo. The source of truth for their contracts is
 `prospects-data/schema/*.schema.json`; representative shapes are below. The
-auto-heal job only checks out `vibe-tracker`, so use these rather than inventing
-shapes. (If you need live data, a read-only checkout of `keithsecond/prospects-data`
-can be added to the workflow — but these committed shapes are the intended
-reference so no cross-repo token is required.)
+automated jobs only check out `vibe-tracker`, so use these committed shapes
+rather than inventing your own — and do **not** attempt to clone or fetch another
+repo.
+
+> **Maintainer note (not an instruction to the automated jobs):** if live data is
+> ever needed, a human can add a read-only `keithsecond/prospects-data` checkout
+> to the workflow (with an appropriately scoped token). Until then the committed
+> shapes here are the intended reference, so no cross-repo token is required.
 
 ### `filters.json` — eightfold tenants (id-keyed object)
 
