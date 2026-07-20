@@ -13,6 +13,7 @@ const filePath = process.env.DATA_FILE || path.join(__dirname, '../prospects/tes
 const descriptionDir = process.env.DESCRIPTION_DIR || path.join(__dirname, '../prospects/test-data/description');
 const draftSitesPath = process.env.DRAFT_SITES_FILE || path.join(__dirname, '../prospects/test-data/draft.sites.json');
 const sitesPath = process.env.SITES_FILE || path.join(__dirname, '../prospects/test-data/sites.json');
+const filtersPath = process.env.FILTERS_FILE || path.join(__dirname, '../prospects/test-data/filters.json');
 
 // Middleware
 app.use(express.json());
@@ -45,6 +46,29 @@ function generateNextSiteId(category, entries) {
 
   const maxNum = nums.length > 0 ? Math.max(...nums) : 0;
   return prefix + String(maxNum + 1).padStart(padWidth, '0');
+}
+
+// Eightfold sites live in filters.json (not sites.json) and use the `E8xx` id
+// range. Scan every `E`-prefixed id across the root filtered tenants and the
+// `sdetOnly` object, then return the next id preserving the numeric width.
+function generateNextEightfoldId(filtersData) {
+  const ids = [
+    ...Object.keys(filtersData).filter((k) => k !== 'sdetOnly'),
+    ...Object.keys(filtersData.sdetOnly || {}),
+  ].filter((id) => /^E\d+$/.test(id));
+
+  const padWidth = ids.length > 0 ? ids[0].slice(1).length : 3;
+  const nums = ids.map((id) => parseInt(id.slice(1), 10)).filter((n) => !isNaN(n));
+  const maxNum = nums.length > 0 ? Math.max(...nums) : 0;
+  return 'E' + String(maxNum + 1).padStart(padWidth, '0');
+}
+
+// Derive the eightfold subdomain and canonical baseUrl from a draft URL such as
+// `https://nvidia.eightfold.ai/careers` → { subdomain: 'nvidia',
+// baseUrl: 'https://nvidia.eightfold.ai' }. The `domain` is operator-supplied.
+function deriveEightfoldFields(url) {
+  const subdomain = new URL(url).hostname.split('.')[0];
+  return { subdomain, baseUrl: `https://${subdomain}.eightfold.ai` };
 }
 
 // ============================================
@@ -246,29 +270,63 @@ app.post('/updateNotes', (req, res) => {
 
 /**
  * POST /promoteDraftSite
- * Move a draft entry into a target category in sites.json.
- * Body: { draftId, category }
+ * Promote a draft entry out of draft.sites.json:
+ *   - Eightfold drafts land in filters.json under the `sdetOnly` object (no
+ *     category; the operator supplies `domain`). Body: { draftId, domain }
+ *   - Every other provider lands in sites.json under a category.
+ *     Body: { draftId, category }
  */
 app.post('/promoteDraftSite', (req, res) => {
   try {
-    const { draftId, category } = req.body;
+    const { draftId, category, domain } = req.body;
 
-    if (!draftId || !category) {
-      return res.json({ success: false, message: 'Missing required fields: draftId, category' });
+    if (!draftId) {
+      return res.json({ success: false, message: 'Missing required field: draftId' });
+    }
+
+    const draftData = JSON.parse(fs.readFileSync(draftSitesPath, 'utf8'));
+    const draftIndex = draftData.Draft.findIndex(e => e.id === draftId);
+    if (draftIndex === -1) {
+      return res.json({ success: false, message: 'Draft entry not found' });
+    }
+    const entry = draftData.Draft[draftIndex];
+
+    // ============ EIGHTFOLD → filters.json sdetOnly ============
+    if (String(entry.Provider).toLowerCase() === 'eightfold') {
+      if (!domain || !String(domain).trim()) {
+        return res.json({ success: false, message: 'Missing required field: domain' });
+      }
+
+      const filtersData = JSON.parse(fs.readFileSync(filtersPath, 'utf8'));
+      if (!filtersData.sdetOnly) filtersData.sdetOnly = {};
+
+      const newId = generateNextEightfoldId(filtersData);
+      const { subdomain, baseUrl } = deriveEightfoldFields(entry.URL);
+
+      draftData.Draft.splice(draftIndex, 1);
+      filtersData.sdetOnly[newId] = {
+        id: newId,
+        org: entry.org,
+        subdomain,
+        domain: String(domain).trim(),
+        baseUrl,
+      };
+
+      fs.writeFileSync(draftSitesPath, JSON.stringify(draftData, null, 2));
+      fs.writeFileSync(filtersPath, JSON.stringify(filtersData, null, 4));
+
+      return res.json({ success: true, newId });
+    }
+
+    // ============ EVERYTHING ELSE → sites.json category ============
+    if (!category) {
+      return res.json({ success: false, message: 'Missing required field: category' });
     }
     if (!CATEGORY_PREFIX[category]) {
       return res.json({ success: false, message: 'Invalid category' });
     }
 
-    const draftData = JSON.parse(fs.readFileSync(draftSitesPath, 'utf8'));
     const sitesData = JSON.parse(fs.readFileSync(sitesPath, 'utf8'));
-
-    const draftIndex = draftData.Draft.findIndex(e => e.id === draftId);
-    if (draftIndex === -1) {
-      return res.json({ success: false, message: 'Draft entry not found' });
-    }
-
-    const entry = draftData.Draft[draftIndex];
     const targetArray = sitesData[category] || [];
     const newId = generateNextSiteId(category, targetArray);
 

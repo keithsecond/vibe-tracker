@@ -775,7 +775,18 @@
         .map(c => `<option value="${c}">${c}</option>`)
         .join('');
 
-      const rows = drafts.map(entry => `
+      const rows = drafts.map(entry => {
+        // Eightfold drafts are promoted into filters.json sdetOnly rather than a
+        // sites.json category, so they take a domain text box in place of the
+        // category selector.
+        const isEightfold = String(entry.Provider).toLowerCase() === 'eightfold';
+        const targetCell = isEightfold
+          ? `<input type="text" id="domain-${entry.id}" placeholder="e.g. nvidia.com">`
+          : `<select id="cat-${entry.id}">
+              <option value="">-- Select --</option>
+              ${categoryOptions}
+            </select>`;
+        return `
         <tr>
           <td>${entry.id}</td>
           <td>${entry.org}</td>
@@ -784,17 +795,15 @@
           </td>
           <td>${entry.Provider}</td>
           <td onclick="event.stopPropagation()">
-            <select id="cat-${entry.id}">
-              <option value="">-- Select --</option>
-              ${categoryOptions}
-            </select>
+            ${targetCell}
           </td>
           <td onclick="event.stopPropagation()">
             <button class="btn-promote" onclick="promoteDraftSite('${entry.id}')">Promote</button>
             <button class="btn-dismiss" onclick="dismissDraftSite('${entry.id}')">Dismiss</button>
           </td>
         </tr>
-      `).join('');
+      `;
+      }).join('');
 
       content.innerHTML = `
         <table id="draftTable">
@@ -804,7 +813,7 @@
               <th>Org</th>
               <th>URL</th>
               <th>Provider</th>
-              <th>Category</th>
+              <th>Category / Domain</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -814,19 +823,33 @@
     }
 
     async function promoteDraftSite(draftId) {
-      const categorySelect = document.getElementById(`cat-${draftId}`);
-      const category = categorySelect ? categorySelect.value : '';
+      // Eightfold rows carry a domain text box (into filters.json sdetOnly);
+      // every other provider carries a category selector (into sites.json).
+      const domainInput = document.getElementById(`domain-${draftId}`);
+      let body;
 
-      if (!category) {
-        alert('Please select a category before promoting.');
-        return;
+      if (domainInput) {
+        const domain = domainInput.value.trim();
+        if (!domain) {
+          alert('Please enter a domain before promoting.');
+          return;
+        }
+        body = { draftId, domain };
+      } else {
+        const categorySelect = document.getElementById(`cat-${draftId}`);
+        const category = categorySelect ? categorySelect.value : '';
+        if (!category) {
+          alert('Please select a category before promoting.');
+          return;
+        }
+        body = { draftId, category };
       }
 
       try {
         const response = await fetch('/promoteDraftSite', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ draftId, category })
+          body: JSON.stringify(body)
         });
 
         const result = await response.json();
