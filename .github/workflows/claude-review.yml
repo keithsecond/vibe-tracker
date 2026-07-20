@@ -3,11 +3,16 @@ name: Claude review & auto-heal
 # Layered on top of the deterministic "PR CI" workflow. Two behaviors:
 #   1. review    — on a `claude-review` label or an `@claude` mention, review the
 #                  PR diff and suggest concrete Playwright tests as a PR review.
-#   2. auto-heal — after "PR CI" fails, triage test-vs-code, push a minimal fix
-#                  commit (prefixed "[auto-heal]"), capped at 3 attempts. Never merges.
-#                  Pushes with a GitHub App token (not GITHUB_TOKEN) so the fix commit
-#                  re-triggers "PR CI" automatically. If it spots a real bug that is
-#                  out of scope for the CI fix, it files a de-duplicated issue.
+#   2. auto-heal — after "PR CI" fails, triage test-vs-code (and coverage-gap),
+#                  push a minimal fix commit (prefixed "[auto-heal]"), capped at 3
+#                  attempts. Never merges. Pushes with a GitHub App token (not
+#                  GITHUB_TOKEN) so the fix commit re-triggers "PR CI" automatically.
+#                  If it spots a real bug that is out of scope for the CI fix, it
+#                  files a de-duplicated issue.
+#
+# Both jobs read test/TESTING.md (the repo's test-design rubric + canonical data
+# shapes) so generated tests and fixtures match a consistent bar rather than
+# inventing placeholder shapes that skip the code path under test.
 #
 # Prerequisites (repo settings):
 #   - Secret CLAUDE_CODE_OAUTH_TOKEN — a Claude Pro/Max subscription token from
@@ -55,10 +60,20 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
             You are reviewing a pull request for the vibe-tracker app.
+
+            FIRST read test/TESTING.md — it defines this repo's test-design rubric
+            and the canonical data shapes. Apply that rubric in your review.
+
             If the triggering comment asked something specific, address that first.
             Otherwise, review the diff for missing integration-test coverage:
             - Identify changed behavior in server.js or public/index.html that is
               not exercised by the @smoke/@regression Playwright suites in test/.
+            - Judge coverage against the TESTING.md rubric: every changed branch
+              (both sides of case-insensitive comparisons, each half of compound
+              guards, both arms of rendering conditionals), fixtures that mirror
+              the real data shapes (not placeholders that skip the code path),
+              exact assertions (toEqual) with explicit invariant checks, and
+              assertions that sibling data stays untouched.
             - Post concrete, ready-to-paste Playwright tests (matching the style in
               test/regression.spec.js, using test/helpers/data.js) as a PR review.
             Suggest only; do not modify code in this job.
@@ -114,17 +129,36 @@ jobs:
             "${{ github.event.workflow_run.head_branch }}" (attempt
             ${{ steps.guard.outputs.attempts }} of 3).
 
+            FIRST read test/TESTING.md — it defines this repo's test-design rubric,
+            the fixture harness, and the canonical data shapes. Any test or fixture
+            you write MUST follow it.
+
             1. Run `npm ci`, then `npm run test:smoke` and `npm run test:regression`
                to reproduce the failures.
-            2. For each failure decide whether the TEST is wrong (assertion no longer
-               matches intended behavior) or the CODE is wrong (a real regression).
-            3. Apply the minimal fix in the appropriate place. Keep it scoped to the
-               failure — no refactors.
-            4. Commit with a message prefixed "[auto-heal]" and push to the branch.
-               (The push uses a GitHub App token, so it re-triggers "PR CI" — expect
-               the suite to run again on your commit.)
-            5. Post a PR comment summarizing each failure, your test-vs-code verdict,
-               and what you changed. Do NOT merge the PR.
+            2. Identify what failed. Note that "PR CI" has two jobs:
+               - the Playwright suite (a real test failure), and
+               - the Test-coverage gate, which fails when server.js/public/index.html
+                 changed WITHOUT a test/ change. A coverage-gate failure is NOT a
+                 broken test — the suites may pass cleanly. It means new behavior
+                 needs NEW tests. Do not treat the passing suite as "nothing to do":
+                 write the missing tests.
+            3. For a real test failure, decide whether the TEST is wrong (assertion
+               no longer matches intended behavior) or the CODE is wrong (a real
+               regression), and apply the minimal fix in the appropriate place.
+               For a coverage-gate failure, add tests per the TESTING.md rubric:
+               cover every changed branch (both sides of case-insensitive checks,
+               each half of compound guards, both arms of rendering conditionals);
+               base fixtures on the real data shapes (never a placeholder that skips
+               the code path); use exact assertions (toEqual) plus explicit invariant
+               checks; and assert sibling data stays untouched. Wire any new data
+               file through test/helpers/data.js AND playwright.config.js.
+            4. Keep changes scoped — no refactors. Commit with a message prefixed
+               "[auto-heal]" and push to the branch. (The push uses a GitHub App
+               token, so it re-triggers "PR CI" — expect the suite to run again.)
+            5. Post a PR comment summarizing each failure, your verdict (test / code /
+               coverage gap), and what you changed. End with a short COVERAGE REPORT:
+               the branches/cases you covered and any you deliberately left out (why).
+               Do NOT merge the PR.
             6. If you notice a REAL bug that is OUT OF SCOPE for this CI fix (a latent
                defect, not the cause of the current failure), do NOT fix it here.
                Instead search existing open issues via mcp__github__*, and if none
