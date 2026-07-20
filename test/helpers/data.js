@@ -17,12 +17,14 @@ const DATA_FILE = path.join(DATA_DIR, 'jobResults.json');
 const DESCRIPTION_DIR = path.join(DATA_DIR, 'description');
 const DRAFT_SITES_FILE = path.join(DATA_DIR, 'draft.sites.json');
 const SITES_FILE = path.join(DATA_DIR, 'sites.json');
+const FILTERS_FILE = path.join(DATA_DIR, 'filters.json');
 
 const FIXTURES_DIR = path.join(__dirname, '..', 'fixtures');
 const FIXTURE_DATA_FILE = path.join(FIXTURES_DIR, 'jobResults.json');
 const FIXTURE_DESCRIPTION_DIR = path.join(FIXTURES_DIR, 'description');
 const FIXTURE_DRAFT_SITES_FILE = path.join(FIXTURES_DIR, 'draft.sites.json');
 const FIXTURE_SITES_FILE = path.join(FIXTURES_DIR, 'sites.json');
+const FIXTURE_FILTERS_FILE = path.join(FIXTURES_DIR, 'filters.json');
 
 /** Copy the fixtures fresh into the disposable temp data dir. */
 function resetData() {
@@ -37,6 +39,7 @@ function resetData() {
   }
   fs.copyFileSync(FIXTURE_DRAFT_SITES_FILE, DRAFT_SITES_FILE);
   fs.copyFileSync(FIXTURE_SITES_FILE, SITES_FILE);
+  fs.copyFileSync(FIXTURE_FILTERS_FILE, FILTERS_FILE);
 }
 
 /** Read the current job-results data the server is operating on. */
@@ -61,15 +64,22 @@ function readSites() {
   return JSON.parse(fs.readFileSync(SITES_FILE, 'utf8'));
 }
 
+/** Read the current filters.json data the server is operating on. */
+function readFilters() {
+  return JSON.parse(fs.readFileSync(FILTERS_FILE, 'utf8'));
+}
+
 module.exports = {
   DATA_DIR,
   DATA_FILE,
   DESCRIPTION_DIR,
   DRAFT_SITES_FILE,
   SITES_FILE,
+  FILTERS_FILE,
   resetData,
   readData,
   readDescription,
   readDraftSites,
   readSites,
+  readFilters,
 };

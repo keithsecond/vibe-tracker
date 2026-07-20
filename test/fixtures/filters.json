@@ -1,0 +1,14 @@
+{
+    "acme": {
+        "id": "acmeTenant"
+    },
+    "sdetOnly": {
+        "E001": {
+            "id": "E001",
+            "org": "ExistingCo",
+            "subdomain": "existingco",
+            "domain": "existingco.com",
+            "baseUrl": "https://existingco.eightfold.ai"
+        }
+    }
+}
