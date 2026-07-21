@@ -71,6 +71,27 @@ function deriveEightfoldFields(url) {
   return { subdomain, baseUrl: `https://${subdomain}.eightfold.ai` };
 }
 
+// Read draft.sites.json defensively. A missing or empty file is a valid
+// "no drafts" state — it happens on a freshly initialized data dir, or once
+// every draft has been promoted/dismissed — so return an empty Draft list
+// instead of throwing. Without this a 0-byte file makes JSON.parse throw and
+// the app fails to load its Draft Sites panel on startup. Genuinely malformed
+// (non-empty, invalid) JSON still throws so real corruption isn't hidden.
+function readDraftData() {
+  let raw;
+  try {
+    raw = fs.readFileSync(draftSitesPath, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return { Draft: [] };
+    throw err;
+  }
+  if (!raw.trim()) return { Draft: [] };
+
+  const data = JSON.parse(raw);
+  if (!Array.isArray(data.Draft)) data.Draft = [];
+  return data;
+}
+
 // ============================================
 // GET ENDPOINTS
 // ============================================
@@ -108,8 +129,7 @@ app.get('/vendors', (req, res) => {
  */
 app.get('/draftSites', (req, res) => {
   try {
-    const data = JSON.parse(fs.readFileSync(draftSitesPath, 'utf8'));
-    res.json(data.Draft || []);
+    res.json(readDraftData().Draft);
   } catch (error) {
     res.status(500).json({ error: 'Failed to load draft sites' });
   }
@@ -284,7 +304,7 @@ app.post('/promoteDraftSite', (req, res) => {
       return res.json({ success: false, message: 'Missing required field: draftId' });
     }
 
-    const draftData = JSON.parse(fs.readFileSync(draftSitesPath, 'utf8'));
+    const draftData = readDraftData();
     const draftIndex = draftData.Draft.findIndex(e => e.id === draftId);
     if (draftIndex === -1) {
       return res.json({ success: false, message: 'Draft entry not found' });
@@ -356,7 +376,7 @@ app.post('/dismissDraftSite', (req, res) => {
       return res.json({ success: false, message: 'Missing required field: draftId' });
     }
 
-    const draftData = JSON.parse(fs.readFileSync(draftSitesPath, 'utf8'));
+    const draftData = readDraftData();
     const draftIndex = draftData.Draft.findIndex(e => e.id === draftId);
 
     if (draftIndex === -1) {

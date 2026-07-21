@@ -4,8 +4,9 @@
 // promoting them into sites.json, or dismissing them.
 // Run with: npm run test:regression
 
+const fs = require('fs');
 const { test, expect } = require('@playwright/test');
-const { resetData, readDraftSites, readSites } = require('./helpers/data');
+const { resetData, readDraftSites, readSites, DRAFT_SITES_FILE } = require('./helpers/data');
 
 test.describe('@regression', () => {
   test.beforeEach(() => {
@@ -17,6 +18,44 @@ test.describe('@regression', () => {
     expect(res.status()).toBe(200);
     const drafts = await res.json();
     expect(drafts.map((d) => d.id)).toEqual(['D-1', 'D-2']);
+  });
+
+  // Regression: a 0-byte or missing draft.sites.json is a valid "no drafts"
+  // state (fresh data dir, or every draft already promoted/dismissed). It must
+  // not 500 — that broke the front end's initial load so the app wouldn't
+  // launch its Draft Sites panel.
+  test('GET /draftSites returns [] when draft.sites.json is empty', async ({ request }) => {
+    fs.writeFileSync(DRAFT_SITES_FILE, '');
+    const res = await request.get('/draftSites');
+    expect(res.status()).toBe(200);
+    expect(await res.json()).toEqual([]);
+  });
+
+  test('GET /draftSites returns [] when draft.sites.json is missing', async ({ request }) => {
+    fs.rmSync(DRAFT_SITES_FILE, { force: true });
+    const res = await request.get('/draftSites');
+    expect(res.status()).toBe(200);
+    expect(await res.json()).toEqual([]);
+  });
+
+  test('the app still loads and shows a 0 count with an empty draft.sites.json', async ({ page }) => {
+    fs.writeFileSync(DRAFT_SITES_FILE, '');
+    await page.goto('/');
+    await expect(page.locator('#draftCount')).toHaveText('0');
+    await page.getByRole('button', { name: /Draft Sites/ }).click();
+    await expect(page.locator('#draftSection')).toBeVisible();
+    await expect(page.locator('#draftContent')).toContainText('No draft sites remaining');
+  });
+
+  test('promoting/dismissing against an empty draft.sites.json reports not-found instead of erroring', async ({ request }) => {
+    fs.writeFileSync(DRAFT_SITES_FILE, '');
+    const promote = await request.post('/promoteDraftSite', { data: { draftId: 'D-1', category: 'Private' } });
+    expect(promote.status()).toBe(200);
+    expect(await promote.json()).toMatchObject({ success: false, message: expect.stringMatching(/not found/i) });
+
+    const dismiss = await request.post('/dismissDraftSite', { data: { draftId: 'D-1' } });
+    expect(dismiss.status()).toBe(200);
+    expect(await dismiss.json()).toMatchObject({ success: false, message: expect.stringMatching(/not found/i) });
   });
 
   test('opening the Draft Sites section renders pending entries with a count badge', async ({ page }) => {
