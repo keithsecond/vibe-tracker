@@ -569,11 +569,14 @@
       const searchQuery = document.getElementById('searchBox').value.toLowerCase();
       const siteFilter = document.getElementById('siteFilter').value;
 
-      // Filter jobs based on search and site
+      // Filter jobs based on search and site. Jobs can arrive before every
+      // field is scraped (e.g. no title yet), so guard against missing
+      // title/id here — a single undefined field must not throw and abort the
+      // whole render, which would blank the entire table.
       let filteredJobs = allJobs.filter(job => {
         const matchSearch =
-          job.title.toLowerCase().includes(searchQuery) ||
-          job.id.toString().includes(searchQuery);
+          (job.title || '').toLowerCase().includes(searchQuery) ||
+          (job.id ?? '').toString().includes(searchQuery);
 
         const matchSite = !siteFilter || job.site === siteFilter;
 
@@ -603,8 +606,8 @@
           }
         };
 
-        // Build title with NEW badge
-        let titleHTML = job.title;
+        // Build title with NEW badge (a job may not have a title scraped yet)
+        let titleHTML = job.title || '';
         if (job.status === '0') {
           titleHTML += ' <span class="badge">NEW</span>';
         }

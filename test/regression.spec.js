@@ -3,8 +3,9 @@
 // @regression — full behavioral coverage of the endpoints and UI flows.
 // Run with: npm run test:regression
 
+const fs = require('fs');
 const { test, expect } = require('@playwright/test');
-const { resetData, readData, readDescription } = require('./helpers/data');
+const { resetData, readData, readDescription, DATA_FILE } = require('./helpers/data');
 
 test.describe('@regression', () => {
   test.beforeEach(() => {
@@ -135,6 +136,32 @@ test.describe('@regression', () => {
     // => G-100, G-200, A-1, A-2
     const ids = await page.locator('#jobTable tbody tr td:nth-child(3)').allInnerTexts();
     expect(ids.map((s) => s.trim())).toEqual(['G-100', 'G-200', 'A-1', 'A-2']);
+  });
+
+  // Regression: the scraper can write a job before its title is known. A job
+  // with no `title` must not blank the entire table — previously
+  // `job.title.toLowerCase()` in the filter threw, aborting the whole render
+  // so zero jobs displayed.
+  test('renders all jobs even when one has no title', async ({ page }) => {
+    const data = readData();
+    data.Acme.jobs.push({
+      id: 'A-99',
+      // no `title` field — not scraped yet
+      link: 'https://acme.example.com/careers/A-99',
+      status: '0',
+      date: '2026-06-01',
+      notes: '',
+    });
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+
+    await page.goto('/');
+    // All five jobs render (the four fixtures + the title-less one), proving
+    // the missing title didn't abort the render.
+    await expect(page.locator('#jobTable tbody tr')).toHaveCount(5);
+    // Jobs from other vendors still show...
+    await expect(page.locator('#jobTable tbody tr', { hasText: 'G-100' })).toBeVisible();
+    // ...and the title-less row is present and clickable, not a crash.
+    await expect(page.locator('#jobTable tbody tr', { hasText: 'A-99' })).toBeVisible();
   });
 
   test('shows a NEW badge only on new (status 0) jobs', async ({ page }) => {
