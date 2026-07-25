@@ -50,6 +50,7 @@ flowchart LR
   server -->|promote| sites
   server -->|promote| draft
   jr -->|bridge-to-career-ops.mjs| careerops
+  desc -->|bridge-to-career-ops.mjs| careerops
 ```
 
 - **`prospects`** — a Playwright job-aggregation pipeline. Scrapes career
@@ -65,7 +66,9 @@ flowchart LR
   `jobResults.json` for display, **edits** job status/notes, and **manages** the
   draft-site review workflow (promote / dismiss).
 - **`career-ops`** — downstream AI evaluation, fed one-way by
-  `prospects/bridge-to-career-ops.mjs`. Out of scope here.
+  `prospects/bridge-to-career-ops.mjs`, which reads **both** `jobResults.json`
+  and `description/<org>.description.json` (the description text becomes each
+  `career-ops/jds/<org-slug>-<entityId>.md`). Out of scope here.
 
 ### Repository wiring
 
