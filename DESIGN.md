@@ -5,10 +5,15 @@ Scope: the `vibe-tracker` UI, the `prospects` scraping pipeline, and the
 `prospects-data` shared data repository. Covers the current system and a
 concrete plan for three new features.
 
+> **Decisions confirmed 2026-07-25.** Every decision point below is now locked
+> at its recommended default (see the §8 summary). One addition was made during
+> review: description entries will carry their own `date` field (**D3.6**),
+> which removes the join/ordering dependency from the purge (§7.3). This pass is
+> **documentation only** — implementation is a separate, later change.
+
 > **How to read the feature sections:** each proposal ends with a
-> **Decision points** list. Recommended defaults are marked. These are the
-> choices that change the implementation; nothing in the plan is locked until
-> they're confirmed.
+> **Decision points** list. Each is marked **Confirmed** with the chosen option;
+> these are the choices that drive the implementation.
 
 ---
 
@@ -121,11 +126,16 @@ One file per org, keyed by org name. Contract: `description.schema.json`.
 - **Join key:** `"URL entity"` in a description entry equals `id` of the
   matching job in `jobResults.json` for the same org. Verified against live
   data (e.g. Twilio: 18/18 description entities map to jobResults ids).
-- **No date field.** Description age is only knowable by joining to the
-  matching `jobResults` job's `date`. This is the central constraint for the
-  30-day description purge.
+- **No date field today** — description age is currently knowable only by
+  joining to the matching `jobResults` job's `date`. **Planned change (D3.6):**
+  add a `date` field to each description entry so age is self-contained. A
+  one-time backfill stamps existing entries from the join; go-forward,
+  `Utilities.writeDetails` stamps the field at write time. This removes the join
+  and the ordering dependency from the 30-day description purge (§7.3).
 - The schema only *requires* `"URL entity"` (that's what the tracker's decline
-  flow filters on); the other fields are conventional.
+  flow filters on); the other fields are conventional. After D3.6 the schema
+  gains an optional `date` (`YYYY-MM-DD`), kept optional so pre-backfill files
+  still validate.
 
 ### 2.3 `sites.json` — the site registry (non-Eightfold)
 
@@ -351,15 +361,13 @@ same normalisation discovery already uses.
 file (and is idempotent on re-dismiss of the same URL). prospects unit-level:
 `writeDraftSites` skips a discovery whose canonical URL is blocked.
 
-**Decision points.**
-- **D1.1** Block identity = canonical URL. *(Recommended; matches discovery
-  dedup.)*
-- **D1.2** Which actions write to the block file? Dismiss-a-draft *(explicitly
-  specified)*; **and** delete-a-site (§7.2) *(recommended — closes the
-  re-discovery loop)*. Alternative: dismiss only.
-- **D1.3** Keep blocked entries forever, or expire them (e.g. allow
-  re-discovery after N months)? *(Recommended: keep forever; revisit only if
-  the list grows unwieldy.)*
+**Decision points.** *(All confirmed 2026-07-25.)*
+- **D1.1** Block identity — **Confirmed: canonical URL** (`canon(URL)`), matching
+  discovery dedup.
+- **D1.2** What feeds the block file — **Confirmed: dismiss-a-draft *and*
+  delete-a-site** (§7.2, per D2.3), closing the re-discovery loop.
+- **D1.3** Block expiry — **Confirmed: keep forever.** Revisit only if the list
+  grows unwieldy.
 
 ---
 
@@ -406,13 +414,13 @@ misses.
   for a single-user tool; noted, not solved here.
 - **Non-atomic writes** (§6.5) — apply the write-then-rename guard.
 
-**Decision points.**
-- **D2.1** UI placement: a dedicated **"Manage Sites" panel** *(recommended)*
-  vs a delete affordance bolted onto the existing site filter.
-- **D2.2** Scope: `sites.json` only *(as literally specified)* **or** also
-  Eightfold tenants in `filters.json` (root + `sdetOnly`) *(recommended — makes
-  delete symmetric with promote, which can create Eightfold tenants)*.
-- **D2.3** Also block on delete? Ties to D1.2. *(Recommended: yes.)*
+**Decision points.** *(All confirmed 2026-07-25.)*
+- **D2.1** UI placement — **Confirmed: dedicated "Manage Sites" panel** (modelled
+  on the Draft Sites panel), not a delete bolted onto the site filter.
+- **D2.2** Scope — **Confirmed: `sites.json` *and* Eightfold tenants** in
+  `filters.json` (root + `sdetOnly`), making delete symmetric with promote.
+- **D2.3** Also block on delete — **Confirmed: yes** (feeds the block file per
+  D1.2, `source: "delete"`).
 
 ---
 
@@ -422,21 +430,39 @@ misses.
 and remove `description` entries for jobs older than 30 days. (Live data today:
 47 of 1270 jobs are already >90 days old.)
 
-**The load-bearing constraint.** Descriptions have **no timestamp** (§2.2).
-A description entry's age is only knowable by joining `"URL entity"` →
-`jobResults` `id` → `date`. Therefore:
+**The former load-bearing constraint — now removed by D3.6.** Descriptions
+historically had **no timestamp** (§2.2), so a description entry's age was only
+knowable by joining `"URL entity"` → `jobResults` `id` → `date`. That forced a
+strict **ordering dependency** (description purge first, while dates still
+exist) and left orphan entries undatable.
 
-> **Ordering dependency:** compute and apply the **description purge (30d)
-> first**, while the `jobResults` dates still exist, **then** apply the
-> **jobResults purge (90d)**. Reversing the order destroys the dates the
-> description purge depends on.
+**D3.6 gives each description entry its own `date`,** so the description purge
+reads that field directly. The join is needed exactly once — for the one-time
+backfill — and never again:
 
-**Algorithm (per org, single pass):**
-1. From current `jobResults`, build `id → date` for the org.
-2. **Description purge:** in `description/<org>.description.json`, drop each job
-   whose matching `jobResults` date is >30 days old. (Entries with no matching
-   job — orphans — handled per D3.4.) Delete the file if it becomes empty.
-3. **jobResults purge:** drop each job with `date` >90 days old, subject to the
+> **No ordering dependency after backfill.** The 30-day description purge and
+> the 90-day jobResults purge are independent and may run in either order. The
+> description purge no longer reads `jobResults` at all.
+
+**Migration (one-time backfill, `backfillDescriptionDates.mjs`).** For each
+`description/<org>.description.json`, load the org's `jobResults` `id → date`
+map and stamp `date` onto every entry via `"URL entity"`. Orphan entries (no
+matching job) get no date from the join; stamp them with the run date so they
+become datable and purge normally thereafter. Idempotent: entries that already
+have a `date` are left untouched. Run once, before the purge is first enabled.
+
+**Go-forward write (D3.6).** `Utilities.writeDetails` (`classes/utilities.ts`)
+adds `date` to each `incoming` entry. Source: the matching `jobResults` job's
+`date` when available, else the run date (`new Date().toISOString().slice(0,10)`).
+`mergeUnique` already dedupes by `JobID`, so existing entries keep their
+original stamped date — only genuinely new entries are dated.
+
+**Algorithm (per org, single pass) — post-D3.6:**
+1. **Description purge:** in `description/<org>.description.json`, drop each
+   entry whose own `date` is >30 days old (D3.2 status policy does **not** apply
+   to descriptions — they carry no status). Delete the file if it becomes empty.
+   No `jobResults` read required.
+2. **jobResults purge:** drop each job with `date` >90 days old, subject to the
    status policy (D3.2). Remove the vendor block if `jobs` becomes empty
    (D3.3). Never touch `Status Definitions`.
 
@@ -451,42 +477,55 @@ is a poor fit — it's an on-demand UI server, not a scheduled job.
 **Configuration.** `JOB_RESULTS_TTL_DAYS=90`, `DESCRIPTION_TTL_DAYS=30`,
 `--dry-run`. Cutoffs measured from run time against the `date` field.
 
-**Schema/CI.** No schema change (fields already present); `data-check.yml`
-keeps validating the smaller files.
+**Schema/CI.** The `jobResults` purge needs no schema change. **D3.6 adds an
+optional `date` (`YYYY-MM-DD`) to `description.schema.json`** — kept *optional*
+so files that predate the backfill still validate, and so the `additionalProperties`
+job shape stays permissive. Mirror the same field in the `JobDetails` /
+description-entry shape in `classes/utilities.ts`. `data-check.yml` keeps
+validating the (smaller, now-dated) description files.
 
-**Decision points.**
-- **D3.1** Owner: **prospects `globalTeardown` + CLI wrapper** *(recommended)*
-  vs standalone-script-on-its-own-cron vs vibe-tracker.
-- **D3.2** Purge policy: **protect active applications** — purge only status
-  `0` (new) and `4` (declined) past 90 days, never `1/2/3` regardless of age
-  *(recommended — auto-deleting a job you applied to or interviewed for loses
-  real history)* vs **age-only** (delete anything >90d).
-- **D3.3** When a vendor's jobs all purge, **remove the empty vendor block**
-  *(recommended — keeps the file tidy; the registry in `sites.json` remains the
-  source of truth)* vs keep it with `jobs: []`.
-- **D3.4** Orphan description entries (no matching `jobResults` job): prune them
-  too *(recommended — they're undatable and effectively dead)* vs leave
-  untouched.
-- **D3.5** Run cadence: piggyback every CI test run *(recommended)* vs a
-  dedicated scheduled workflow.
+**Decision points.** *(All confirmed 2026-07-25.)*
+- **D3.1** Owner — **Confirmed: prospects `globalTeardown` + CLI wrapper**
+  (`node purge.mjs --dry-run`, mirroring `bridge-to-career-ops.mjs`). Runs on the
+  self-hosted CI runner that already commits `test-data/` back; no new schedule
+  or credentials.
+- **D3.2** Purge policy — **Confirmed: protect active applications.** Purge only
+  status `0` (new) and `4` (declined) past 90 days; never `1/2/3` regardless of
+  age. (Applies to `jobResults` only; descriptions carry no status.)
+- **D3.3** Empty vendor blocks — **Confirmed: remove** the vendor block when its
+  `jobs` empties. `sites.json` remains the source of truth.
+- **D3.4** Orphan description entries — **Confirmed: prune.** After D3.6 they are
+  datable (backfill stamps them with the run date), so they purge by their own
+  `date` on the normal 30-day rule rather than as a special case.
+- **D3.5** Run cadence — **Confirmed: every CI run** (piggybacks the existing
+  teardown; ties to D3.1).
+- **D3.6** *(new)* Description entries carry their own **`date`** — **Confirmed.**
+  One-time `backfillDescriptionDates.mjs` populates existing entries from the
+  `jobResults` join; `Utilities.writeDetails` stamps the field going forward;
+  `description.schema.json` gains an optional `date`. Rationale: `globalTeardown`
+  no longer joins to `jobResults` for the description purge, and the two purges
+  become order-independent.
 
 ---
 
 ## 8. Decision summary
 
-| # | Decision | Recommended default |
+All confirmed 2026-07-25 at the recommended default.
+
+| # | Decision | Confirmed |
 |---|---|---|
 | D1.1 | Block-file identity | Canonical URL |
 | D1.2 | What feeds the block file | Dismiss **and** delete-site |
 | D1.3 | Block expiry | Keep forever |
 | D2.1 | Delete-site UI placement | New "Manage Sites" panel |
 | D2.2 | Delete-site scope | `sites.json` **+** Eightfold `filters.json` |
-| D2.3 | Block on delete | Yes |
+| D2.3 | Block on delete | Yes (`source: "delete"`) |
 | D3.1 | Purge owner | prospects `globalTeardown` + CLI |
 | D3.2 | Purge policy | Protect active statuses (purge only 0 & 4) |
 | D3.3 | Empty vendor blocks | Remove |
-| D3.4 | Orphan descriptions | Prune |
+| D3.4 | Orphan descriptions | Prune (datable after D3.6 backfill) |
 | D3.5 | Purge cadence | Every CI run |
+| D3.6 | `date` on description entries | Yes — backfill + `writeDetails` stamp; removes the purge join/ordering dependency |
 
 ### Files touched per feature
 
@@ -494,7 +533,7 @@ keeps validating the smaller files.
 |---|---|---|---|
 | 7.1 Block file | `blocked.sites.json`, `schema/blockedSites.schema.json`, `data-check.yml` | `googleDiscoveryWriter.ts` | `server.js` (`/dismissDraftSite`, env path), fixture + test |
 | 7.2 Delete site | (data mutated) | — | `server.js` (`/deleteSite`, `/sites`), `index.html` (Manage Sites panel), fixtures + `deleteSite.spec.js` |
-| 7.3 Purge | (data mutated) | `utilities.ts` (`purgeStaleData`), `globalTeardown.ts`, `purge.mjs` | — |
+| 7.3 Purge | `description.schema.json` (optional `date`), `data-check.yml` | `utilities.ts` (`purgeStaleData` + `writeDetails` date stamp + `JobDetails` shape), `globalTeardown.ts`, `purge.mjs`, `backfillDescriptionDates.mjs` | — |
 
 ---
 
@@ -504,6 +543,10 @@ keeps validating the smaller files.
    is fully specified. Establishes `blocked.sites.json` + its schema.
 2. **7.2 delete site** — depends on 7.1 only for the optional block-on-delete
    hook (D2.3); can land independently otherwise.
-3. **7.3 purge** — independent of 1 & 2; lives in `prospects`. Land once the
-   status policy (D3.2) is confirmed, since that choice is irreversible against
-   already-purged data.
+3. **7.3 purge** — independent of 1 & 2; lives in `prospects`. Order within the
+   feature: (a) add the optional `date` to `description.schema.json` and the
+   `writeDetails` stamp, (b) run `backfillDescriptionDates.mjs` **once** so every
+   existing entry is dated, (c) only then enable `purgeStaleData()` in
+   `globalTeardown`. The status policy (D3.2) is confirmed but stays
+   irreversible against already-purged data, so the first live run should be a
+   `--dry-run` audit.
