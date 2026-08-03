@@ -1,15 +1,20 @@
 'use strict';
 
-// @regression — Dismissing a draft site now demotes it into blocked.sites.json
-// (design §7.1) so googleDiscovery never re-drafts it. Covers:
-//   1. the file is created from scratch (no fixture ships one) with a B0001 id;
-//   2. ids increment past existing (and non-conforming) entries;
+// @regression — Dismissing a draft site demotes it into blocked.sites.json
+// (design §7.1) so googleDiscovery never re-drafts it.
+//
+// The fixture seeds two prior blocks (B0001 Globex via dismiss, B0002 Soylent
+// via delete), like the other fixtures, so the common path here is *appending
+// to an existing file*. Covers:
+//   1. append past the seeded entries with the next B#### id;
+//   2. ids increment past the seeded max (and skip non-conforming ids);
 //   3. dedup by canonical URL — a re-dismiss of an equivalent URL is a no-op;
 //   4. canon() strips a trailing `/careers` and a trailing slash, either alone
 //      or together, so those variants are recognized as the same site;
-//   5. a `Blocked` field that isn't an array (malformed pre-existing file) is
-//      recovered rather than throwing;
-//   6. sibling data (the other draft, sites.json) is left untouched.
+//   5. a `Blocked` field that isn't an array (malformed file) is recovered;
+//   6. an unknown draft id is a no-op that leaves the block file untouched;
+//   7. the file is still created from scratch (B0001) when it is absent;
+//   8. sibling data (the other draft, sites.json) is left untouched.
 // Run with: npm run test:regression
 
 const fs = require('fs');
@@ -36,30 +41,32 @@ function writeBlocked(obj) {
 }
 
 const TODAY = new Date().toISOString().slice(0, 10);
+// The two ids the fixture ships with (see test/fixtures/blocked.sites.json).
+const SEED_IDS = ['B0001', 'B0002'];
 
 test.describe('@regression blocked sites', () => {
   test.beforeEach(() => {
     resetData();
   });
 
-  test('dismissing a draft creates blocked.sites.json and records the site', async ({ request }) => {
-    expect(readBlockedSites()).toBeNull(); // no fixture ships one
+  test('dismissing a draft appends it to the existing blocked.sites.json with the next id', async ({ request }) => {
+    expect(readBlockedSites().Blocked.map((b) => b.id)).toEqual(SEED_IDS); // fixture ships two prior blocks
 
     const res = await request.post('/dismissDraftSite', { data: { draftId: 'D-1' } });
     const body = await res.json();
     expect(body).toEqual({ success: true, blocked: true });
 
-    expect(readBlockedSites()).toEqual({
-      Blocked: [
-        {
-          id: 'B0001',
-          org: 'Initrode',
-          URL: 'https://initrode.example.com/careers/',
-          Provider: 'Greenhouse',
-          blockedAt: TODAY,
-          source: 'dismiss',
-        },
-      ],
+    const blocked = readBlockedSites().Blocked;
+    expect(blocked).toHaveLength(3);
+    // The seeded entries are preserved and the new one is appended with B0003.
+    expect(blocked.slice(0, 2).map((b) => b.id)).toEqual(SEED_IDS);
+    expect(blocked[2]).toEqual({
+      id: 'B0003',
+      org: 'Initrode',
+      URL: 'https://initrode.example.com/careers/',
+      Provider: 'Greenhouse',
+      blockedAt: TODAY,
+      source: 'dismiss',
     });
 
     // Sibling data is untouched: the other draft survives, sites.json is unwritten.
@@ -67,14 +74,15 @@ test.describe('@regression blocked sites', () => {
     expect(readSites().Private).toHaveLength(1);
   });
 
-  test('dismissing two drafts with distinct URLs assigns incrementing B#### ids', async ({ request }) => {
+  test('successive dismissals get incrementing B#### ids past the seeded max', async ({ request }) => {
     await request.post('/dismissDraftSite', { data: { draftId: 'D-1' } });
     await request.post('/dismissDraftSite', { data: { draftId: 'D-2' } });
 
-    expect(readBlockedSites().Blocked.map((b) => b.id)).toEqual(['B0001', 'B0002']);
+    expect(readBlockedSites().Blocked.map((b) => b.id)).toEqual(['B0001', 'B0002', 'B0003', 'B0004']);
   });
 
   test('the next id skips a non-conforming existing id and uses the max real B#### id', async ({ request }) => {
+    // Overwrites the seed with a scenario that pins the id-generation branch.
     writeBlocked({
       Blocked: [
         { id: 'B0007', org: 'Stale', URL: 'https://stale.example.com', Provider: 'ADP', blockedAt: '2020-01-01', source: 'dismiss' },
@@ -134,7 +142,10 @@ test.describe('@regression blocked sites', () => {
     const res = await request.post('/dismissDraftSite', { data: { draftId: 'D-4' } });
     const body = await res.json();
     expect(body).toEqual({ success: true, blocked: false });
-    expect(readBlockedSites().Blocked).toHaveLength(1);
+
+    const blocked = readBlockedSites().Blocked;
+    expect(blocked).toHaveLength(3); // 2 seeded + 1 Umbrella (D-4 deduped)
+    expect(blocked.filter((b) => b.URL.includes('umbrella'))).toHaveLength(1);
   });
 
   test('canon() treats a bare /careers (no trailing slash) as equivalent for dedup', async ({ request }) => {
@@ -146,7 +157,10 @@ test.describe('@regression blocked sites', () => {
     const res = await request.post('/dismissDraftSite', { data: { draftId: 'D-4' } });
     const body = await res.json();
     expect(body).toEqual({ success: true, blocked: false });
-    expect(readBlockedSites().Blocked).toHaveLength(1);
+
+    const blocked = readBlockedSites().Blocked;
+    expect(blocked).toHaveLength(3); // 2 seeded + 1 Initrode (D-4 deduped)
+    expect(blocked.filter((b) => b.URL.includes('initrode'))).toHaveLength(1);
   });
 
   test('a genuinely different URL for the same org is not deduped', async ({ request }) => {
@@ -156,7 +170,10 @@ test.describe('@regression blocked sites', () => {
     const res = await request.post('/dismissDraftSite', { data: { draftId: 'D-4' } });
     const body = await res.json();
     expect(body).toEqual({ success: true, blocked: true });
-    expect(readBlockedSites().Blocked).toHaveLength(2);
+
+    const blocked = readBlockedSites().Blocked;
+    expect(blocked).toHaveLength(4); // 2 seeded + 2 distinct Initrode boards
+    expect(blocked.filter((b) => b.URL.includes('initrode'))).toHaveLength(2);
   });
 
   test('a malformed blocked.sites.json (Blocked not an array) is recovered rather than throwing', async ({ request }) => {
@@ -177,5 +194,39 @@ test.describe('@regression blocked sites', () => {
         source: 'dismiss',
       },
     ]);
+  });
+
+  test('dismissing an unknown draft id is a no-op that leaves the block file untouched', async ({ request }) => {
+    const res = await request.post('/dismissDraftSite', { data: { draftId: 'does-not-exist' } });
+    const body = await res.json();
+    expect(body.success).toBe(false);
+    expect(body.message).toMatch(/not found/i);
+
+    // blockSite() is never reached (dismiss returns early on an unknown draft),
+    // so the seeded entries are untouched and both drafts survive.
+    expect(readBlockedSites().Blocked.map((b) => b.id)).toEqual(SEED_IDS);
+    expect(readDraftSites().map((d) => d.id)).toEqual(['D-1', 'D-2']);
+  });
+
+  test('the block file is created from scratch (B0001) when it is absent', async ({ request }) => {
+    // Remove the seeded file to exercise the file-missing bootstrap path.
+    fs.rmSync(BLOCKED_SITES_FILE, { force: true });
+    expect(readBlockedSites()).toBeNull();
+
+    const res = await request.post('/dismissDraftSite', { data: { draftId: 'D-1' } });
+    expect(await res.json()).toEqual({ success: true, blocked: true });
+
+    expect(readBlockedSites()).toEqual({
+      Blocked: [
+        {
+          id: 'B0001',
+          org: 'Initrode',
+          URL: 'https://initrode.example.com/careers/',
+          Provider: 'Greenhouse',
+          blockedAt: TODAY,
+          source: 'dismiss',
+        },
+      ],
+    });
   });
 });

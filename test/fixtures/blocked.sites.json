@@ -1,0 +1,20 @@
+{
+  "Blocked": [
+    {
+      "id": "B0001",
+      "org": "Globex",
+      "URL": "https://globex.example.com/careers",
+      "Provider": "greenhouse",
+      "blockedAt": "2026-07-15",
+      "source": "dismiss"
+    },
+    {
+      "id": "B0002",
+      "org": "Soylent",
+      "URL": "https://jobs.lever.co/soylent",
+      "Provider": "lever",
+      "blockedAt": "2026-07-20",
+      "source": "delete"
+    }
+  ]
+}
