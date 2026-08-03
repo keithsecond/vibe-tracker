@@ -319,6 +319,22 @@ over time.
    `readFileSync`/`writeFileSync` (non-atomic). Deleting many rows at once
    raises the cost of a mid-write crash — new destructive operations should
    write-then-rename (or take a `.bak`, as `applied.json.bak` already models).
+6. **Identity is `id` + `canon(URL)`, never the raw org name.** Tolerant org
+   matching (principle 3) is for *lookup only* — resolving which results/
+   description belong to a site. Any operation that *acts on* a site
+   (delete, block, register/promote) must key on the site `id` and, for
+   cross-provider URL identity, `canon(URL)`. The audit found `Standardbots`
+   registered twice (`E014`/`E067`) differing only by slug casing, with
+   duplicate `jobResults` blocks; because the reverse org-lookup keeps only the
+   first id, the second's data was silently shadowed. Keying on org would make
+   a delete ambiguous and a block miss. (See `DATA-AUDIT.md`.)
+7. **Reject duplicate registration at the source.** Registration and promote
+   must refuse a site whose case-folded `org` **or** `canon(URL)` already
+   exists in `sites.json` / `filters.json` (root + `sdetOnly`). This is the
+   **same dedup key the §7.1 block file uses**, so the guard is shared: one
+   canonical-identity check protects registration, promotion, and re-discovery
+   alike. Enforcing it upstream is what prevents the `Standardbots` duplication
+   and the `r001` / `greenhouse.io` mis-keys from recurring.
 
 ---
 
