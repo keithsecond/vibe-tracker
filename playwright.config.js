@@ -1,8 +1,12 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 const { defineConfig, devices } = require('@playwright/test');
-const { DATA_FILE, DESCRIPTION_DIR, DRAFT_SITES_FILE, SITES_FILE, FILTERS_FILE } = require('./test/helpers/data');
+const { DATA_FILE, DESCRIPTION_DIR, DRAFT_SITES_FILE, SITES_FILE, FILTERS_FILE, DATA_DIR } = require('./test/helpers/data');
+// blocked.sites.json shares the disposable test data dir. Derived here (not
+// imported from the test helper) so the feature branch touches no test/ file.
+const BLOCKED_SITES_FILE = path.join(DATA_DIR, 'blocked.sites.json');
 
 const PORT = process.env.PORT || 3100;
 const baseURL = `http://localhost:${PORT}`;
@@ -46,6 +50,7 @@ module.exports = defineConfig({
       DRAFT_SITES_FILE,
       SITES_FILE,
       FILTERS_FILE,
+      BLOCKED_SITES_FILE,
     },
   },
 });

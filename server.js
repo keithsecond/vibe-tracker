@@ -14,6 +14,7 @@ const descriptionDir = process.env.DESCRIPTION_DIR || path.join(__dirname, '../p
 const draftSitesPath = process.env.DRAFT_SITES_FILE || path.join(__dirname, '../prospects/test-data/draft.sites.json');
 const sitesPath = process.env.SITES_FILE || path.join(__dirname, '../prospects/test-data/sites.json');
 const filtersPath = process.env.FILTERS_FILE || path.join(__dirname, '../prospects/test-data/filters.json');
+const blockedSitesPath = process.env.BLOCKED_SITES_FILE || path.join(__dirname, '../prospects/test-data/blocked.sites.json');
 
 // Middleware
 app.use(express.json());
@@ -31,6 +32,48 @@ const CATEGORY_PREFIX = {
   'Recruiters': 'R',
   'Employers': 'E'
 };
+
+// Canonicalize a board URL for identity comparison, matching the normaliser in
+// prospects/pages/googleDiscoveryWriter.ts so a URL blocked here is recognized
+// there: strip a trailing `/careers` and any trailing slash.
+const canon = (u) => String(u || '').replace(/\/careers\/?$/, '').replace(/\/$/, '');
+
+function nextBlockedId(existing) {
+  let max = 0;
+  for (const e of existing) {
+    const m = /^B(\d+)$/.exec((e && e.id) || '');
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return `B${String(max + 1).padStart(4, '0')}`;
+}
+
+// Record a demoted site in blocked.sites.json so googleDiscovery never
+// re-drafts it (design §7.1). Deduplicated by canonical URL; tolerates and
+// creates a missing file. Reused by both dismiss-a-draft and (in §7.2)
+// delete-a-site via the `source` argument.
+function blockSite(entry, source) {
+  let data;
+  try {
+    data = JSON.parse(fs.readFileSync(blockedSitesPath, 'utf8'));
+  } catch {
+    data = { Blocked: [] };
+  }
+  if (!Array.isArray(data.Blocked)) data.Blocked = [];
+
+  const target = canon(entry.URL);
+  if (data.Blocked.some((b) => canon(b.URL) === target)) return false; // already blocked
+
+  data.Blocked.push({
+    id: nextBlockedId(data.Blocked),
+    org: entry.org,
+    URL: entry.URL,
+    Provider: entry.Provider,
+    blockedAt: new Date().toISOString().slice(0, 10),
+    source,
+  });
+  fs.writeFileSync(blockedSitesPath, JSON.stringify(data, null, 2));
+  return true;
+}
 
 function generateNextSiteId(category, entries) {
   const prefix = CATEGORY_PREFIX[category];
@@ -363,10 +406,15 @@ app.post('/dismissDraftSite', (req, res) => {
       return res.json({ success: false, message: 'Draft entry not found' });
     }
 
+    // Dismiss == demote == block: record the site before removing the draft so
+    // googleDiscovery never re-drafts it (§7.1). Deduplicated by canonical URL.
+    const draft = draftData.Draft[draftIndex];
+    const blocked = blockSite({ org: draft.org, URL: draft.URL, Provider: draft.Provider }, 'dismiss');
+
     draftData.Draft.splice(draftIndex, 1);
     fs.writeFileSync(draftSitesPath, JSON.stringify(draftData, null, 2));
 
-    res.json({ success: true });
+    res.json({ success: true, blocked });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
