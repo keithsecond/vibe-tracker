@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const { defineConfig, devices } = require('@playwright/test');
-const { DATA_FILE, DESCRIPTION_DIR, DRAFT_SITES_FILE, SITES_FILE, FILTERS_FILE } = require('./test/helpers/data');
+const { DATA_FILE, DESCRIPTION_DIR, DRAFT_SITES_FILE, SITES_FILE, FILTERS_FILE, BLOCKED_SITES_FILE } = require('./test/helpers/data');
 
 const PORT = process.env.PORT || 3100;
 const baseURL = `http://localhost:${PORT}`;
@@ -46,6 +46,7 @@ module.exports = defineConfig({
       DRAFT_SITES_FILE,
       SITES_FILE,
       FILTERS_FILE,
+      BLOCKED_SITES_FILE,
     },
   },
 });

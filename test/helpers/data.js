@@ -18,6 +18,10 @@ const DESCRIPTION_DIR = path.join(DATA_DIR, 'description');
 const DRAFT_SITES_FILE = path.join(DATA_DIR, 'draft.sites.json');
 const SITES_FILE = path.join(DATA_DIR, 'sites.json');
 const FILTERS_FILE = path.join(DATA_DIR, 'filters.json');
+// blocked.sites.json has no fixture: server.js creates it on first write, so
+// resetData() just needs to make sure it doesn't survive from a prior test
+// (handled by the DATA_DIR wipe below).
+const BLOCKED_SITES_FILE = path.join(DATA_DIR, 'blocked.sites.json');
 
 const FIXTURES_DIR = path.join(__dirname, '..', 'fixtures');
 const FIXTURE_DATA_FILE = path.join(FIXTURES_DIR, 'jobResults.json');
@@ -69,6 +73,12 @@ function readFilters() {
   return JSON.parse(fs.readFileSync(FILTERS_FILE, 'utf8'));
 }
 
+/** Read the current blocked.sites.json data, or null if it hasn't been created yet. */
+function readBlockedSites() {
+  if (!fs.existsSync(BLOCKED_SITES_FILE)) return null;
+  return JSON.parse(fs.readFileSync(BLOCKED_SITES_FILE, 'utf8'));
+}
+
 module.exports = {
   DATA_DIR,
   DATA_FILE,
@@ -76,10 +86,12 @@ module.exports = {
   DRAFT_SITES_FILE,
   SITES_FILE,
   FILTERS_FILE,
+  BLOCKED_SITES_FILE,
   resetData,
   readData,
   readDescription,
   readDraftSites,
   readSites,
   readFilters,
+  readBlockedSites,
 };
