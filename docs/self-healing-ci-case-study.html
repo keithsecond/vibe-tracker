@@ -1,0 +1,722 @@
+<title>Self-Healing CI — Case Study</title>
+<style>
+  :root {
+    --bg: #F3F5F1;
+    --surface: #FFFFFF;
+    --surface-2: #EAEDE7;
+    --border: #D8DDD5;
+    --ink: #17201C;
+    --ink-soft: #4E5852;
+    --ink-faint: #7E887F;
+    --accent: #0E7A5F;
+    --accent-bright: #13936F;
+    --accent-soft: #E1F0EA;
+    --signal: #A45D10;
+    --signal-soft: #F5E9D6;
+    --shadow: 0 1px 2px rgba(20,40,33,.05), 0 10px 30px rgba(20,40,33,.06);
+    --font-mono: ui-monospace, "SFMono-Regular", "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --maxw: 940px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0F1317;
+      --surface: #161B21;
+      --surface-2: #1B222A;
+      --border: #29323B;
+      --ink: #E7ECE9;
+      --ink-soft: #A2ADA7;
+      --ink-faint: #6E7973;
+      --accent: #35C99F;
+      --accent-bright: #48D8AE;
+      --accent-soft: rgba(53,201,159,.13);
+      --signal: #E3A74E;
+      --signal-soft: rgba(227,167,78,.14);
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 14px 34px rgba(0,0,0,.38);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0F1317; --surface: #161B21; --surface-2: #1B222A; --border: #29323B;
+    --ink: #E7ECE9; --ink-soft: #A2ADA7; --ink-faint: #6E7973;
+    --accent: #35C99F; --accent-bright: #48D8AE; --accent-soft: rgba(53,201,159,.13);
+    --signal: #E3A74E; --signal-soft: rgba(227,167,78,.14);
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 14px 34px rgba(0,0,0,.38);
+  }
+  :root[data-theme="light"] {
+    --bg: #F3F5F1; --surface: #FFFFFF; --surface-2: #EAEDE7; --border: #D8DDD5;
+    --ink: #17201C; --ink-soft: #4E5852; --ink-faint: #7E887F;
+    --accent: #0E7A5F; --accent-bright: #13936F; --accent-soft: #E1F0EA;
+    --signal: #A45D10; --signal-soft: #F5E9D6;
+    --shadow: 0 1px 2px rgba(20,40,33,.05), 0 10px 30px rgba(20,40,33,.06);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .wrap {
+    max-width: var(--maxw);
+    margin: 0 auto;
+    padding: clamp(28px, 6vw, 72px) clamp(20px, 5vw, 40px) 64px;
+  }
+  a { color: var(--accent-bright); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  a:focus-visible, .chip:focus-visible {
+    outline: 2px solid var(--accent-bright);
+    outline-offset: 3px;
+    border-radius: 3px;
+  }
+
+  /* ---------- eyebrow / labels ---------- */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: .72rem;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 26px; height: 1px;
+    background: var(--accent);
+    opacity: .6;
+  }
+
+  /* ---------- hero ---------- */
+  h1 {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: clamp(2rem, 5.4vw, 3.35rem);
+    line-height: 1.04;
+    letter-spacing: -.02em;
+    margin: 0 0 22px;
+    text-wrap: balance;
+  }
+  h1 .lit { color: var(--accent); }
+  .lede {
+    font-size: clamp(1.05rem, 1.6vw, 1.2rem);
+    color: var(--ink-soft);
+    max-width: 60ch;
+    margin: 0 0 26px;
+  }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    font-family: var(--font-mono);
+    font-size: .78rem;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 5px 11px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ink-soft);
+    text-decoration: none;
+  }
+  .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+
+  /* ---------- stat strip ---------- */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    margin: 40px 0 8px;
+  }
+  .stat { background: var(--surface); padding: 20px 18px; }
+  .stat .n {
+    font-family: var(--font-mono);
+    font-size: clamp(1.7rem, 3.4vw, 2.3rem);
+    font-weight: 600;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .stat .l {
+    display: block;
+    margin-top: 8px;
+    font-size: .82rem;
+    color: var(--ink-soft);
+    line-height: 1.35;
+  }
+
+  /* ---------- section headings ---------- */
+  .section { margin-top: 60px; }
+  .section > h2 {
+    font-family: var(--font-mono);
+    font-size: 1.32rem;
+    font-weight: 600;
+    letter-spacing: -.01em;
+    margin: 0 0 6px;
+  }
+  .section > .sub { color: var(--ink-soft); margin: 0 0 26px; max-width: 62ch; }
+
+  /* ---------- origin strip ---------- */
+  .origin {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 20px;
+    align-items: start;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    padding: 20px 22px;
+    margin-top: 22px;
+  }
+  .origin .seed {
+    font-family: var(--font-mono);
+    font-size: .66rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 4px 9px;
+    border-radius: 5px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .origin h3 {
+    font-family: var(--font-mono);
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 0 0 7px;
+    letter-spacing: -.01em;
+  }
+  .origin p { margin: 0; color: var(--ink-soft); font-size: .95rem; }
+  .origin p code {
+    font-family: var(--font-mono);
+    font-size: .84em;
+    background: var(--surface-2);
+    padding: 1px 5px; border-radius: 4px;
+    color: var(--ink);
+  }
+  .origin .ref {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: 12px;
+    font-family: var(--font-mono);
+    font-size: .8rem;
+    text-decoration: none;
+    color: var(--accent);
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    padding-bottom: 1px;
+  }
+  .origin .ref:hover { border-bottom-color: var(--accent); }
+  .origin .ref::before { content: "\2192"; opacity: .7; }
+
+  /* ---------- loop timeline ---------- */
+  .loop { display: flex; flex-direction: column; gap: 0; }
+  .stage {
+    display: grid;
+    grid-template-columns: 62px 1fr;
+    gap: 20px;
+    position: relative;
+    padding-bottom: 26px;
+  }
+  .rail { display: flex; flex-direction: column; align-items: center; }
+  .rail .num {
+    font-family: var(--font-mono);
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 8px;
+  }
+  .rail .node {
+    width: 15px; height: 15px; border-radius: 50%;
+    border: 2px solid var(--kind);
+    background: var(--bg);
+    box-shadow: 0 0 0 4px var(--kind-soft);
+    flex: none;
+  }
+  .rail .line {
+    width: 2px; flex: 1 1 auto; margin-top: 8px;
+    background: linear-gradient(var(--border), var(--border));
+  }
+  .stage:last-child .rail .line { display: none; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px 19px;
+    box-shadow: var(--shadow);
+    transform: translateY(8px);
+    opacity: 0;
+    animation: rise .55s cubic-bezier(.22,.61,.36,1) forwards;
+    animation-delay: var(--d, 0s);
+  }
+  .card .kind {
+    font-family: var(--font-mono);
+    font-size: .66rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--kind);
+    background: var(--kind-soft);
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-weight: 600;
+  }
+  .card h3 {
+    font-family: var(--font-mono);
+    font-size: 1.12rem;
+    font-weight: 600;
+    margin: 12px 0 7px;
+    letter-spacing: -.01em;
+  }
+  .card p { margin: 0; color: var(--ink-soft); font-size: .95rem; }
+  .card p code {
+    font-family: var(--font-mono);
+    font-size: .84em;
+    background: var(--surface-2);
+    padding: 1px 5px; border-radius: 4px;
+    color: var(--ink);
+  }
+  .card .ref {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: 13px;
+    font-family: var(--font-mono);
+    font-size: .8rem;
+    text-decoration: none;
+    color: var(--kind);
+    border-bottom: 1px solid color-mix(in srgb, var(--kind) 40%, transparent);
+    padding-bottom: 1px;
+  }
+  .card .ref:hover { border-bottom-color: var(--kind); }
+  .card .ref::before { content: "\2192"; opacity: .7; }
+
+  .stage.detect  { --kind: var(--signal); --kind-soft: var(--signal-soft); }
+  .stage.resolve { --kind: var(--accent); --kind-soft: var(--accent-soft); }
+
+  /* loop-back closer */
+  .closer {
+    grid-column: 2 / 3;
+    display: flex; align-items: center; gap: 12px;
+    margin-top: 2px;
+    font-family: var(--font-mono);
+    font-size: .82rem;
+    color: var(--ink-soft);
+  }
+  .closer .arc {
+    font-size: 1.1rem; color: var(--accent);
+  }
+
+  /* ---------- rerun: three-beat compact loop ---------- */
+  .rerun {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-top: 20px;
+  }
+  .beat {
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--bkind, var(--accent));
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    padding: 16px 17px 17px;
+  }
+  .beat.detect  { --bkind: var(--signal); }
+  .beat.resolve { --bkind: var(--accent); }
+  .beat .step {
+    font-family: var(--font-mono);
+    font-size: .66rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--bkind);
+  }
+  .beat h3 {
+    font-family: var(--font-mono);
+    font-size: 1.02rem;
+    font-weight: 600;
+    margin: 9px 0 7px;
+    letter-spacing: -.01em;
+  }
+  .beat p { margin: 0; color: var(--ink-soft); font-size: .88rem; line-height: 1.5; }
+  .beat p code {
+    font-family: var(--font-mono);
+    font-size: .84em;
+    background: var(--surface-2);
+    padding: 1px 5px; border-radius: 4px;
+    color: var(--ink);
+  }
+  .beat .tag {
+    display: inline-block;
+    margin-top: 11px;
+    font-family: var(--font-mono);
+    font-size: .72rem;
+    color: var(--ink-faint);
+  }
+  .beat .tag a { color: var(--bkind); text-decoration: none; }
+  .beat .tag a:hover { text-decoration: underline; }
+
+  /* ---------- mechanism callout ---------- */
+  .callout {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 22px 24px;
+    box-shadow: var(--shadow);
+  }
+  .callout.spaced { margin-top: 20px; }
+  .callout h3 {
+    font-family: var(--font-mono);
+    font-size: 1rem; margin: 0 0 10px; letter-spacing: -.01em;
+  }
+  .callout p { margin: 0 0 10px; color: var(--ink-soft); font-size: .95rem; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout code {
+    font-family: var(--font-mono); font-size: .85em;
+    background: var(--surface-2); padding: 1px 5px; border-radius: 4px; color: var(--ink);
+  }
+
+  /* ---------- components row ---------- */
+  .comp { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px; }
+  .comp .c {
+    border: 1px solid var(--border); border-radius: 12px;
+    background: var(--surface); padding: 15px 16px;
+  }
+  .comp .c .f { font-family: var(--font-mono); font-size: .82rem; color: var(--accent); font-weight: 600; }
+  .comp .c .t { display: block; margin-top: 6px; font-size: .84rem; color: var(--ink-soft); line-height: 1.4; }
+  .comp .c .born {
+    display: inline-block; margin-top: 9px;
+    font-family: var(--font-mono); font-size: .7rem; font-weight: 600;
+    letter-spacing: .04em;
+    color: var(--ink-faint);
+  }
+  .comp .c .born a { color: var(--accent); text-decoration: none; }
+
+  /* ---------- footer ---------- */
+  footer {
+    margin-top: 60px; padding-top: 24px;
+    border-top: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: 14px 26px;
+    align-items: center; justify-content: space-between;
+    font-family: var(--font-mono); font-size: .78rem; color: var(--ink-faint);
+  }
+  footer a { color: var(--ink-soft); text-decoration: none; }
+  footer a:hover { color: var(--accent-bright); }
+  footer .gated { color: var(--accent); }
+
+  /* ---------- ledger table ---------- */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 14px; }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: .9rem; }
+  thead th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: .68rem;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+    padding: 13px 16px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+  }
+  tbody td { padding: 14px 16px; border-bottom: 1px solid var(--border); color: var(--ink-soft); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody td.art { font-family: var(--font-mono); white-space: nowrap; }
+  tbody td.art a { text-decoration: none; font-weight: 600; }
+  .state {
+    font-family: var(--font-mono);
+    font-size: .72rem; font-weight: 600;
+    letter-spacing: .04em;
+    padding: 3px 9px; border-radius: 999px;
+    white-space: nowrap;
+  }
+  .state.merged { color: var(--accent); background: var(--accent-soft); }
+  .state.closed { color: var(--signal); background: var(--signal-soft); }
+  tbody tr.seed-row td { background: color-mix(in srgb, var(--accent-soft) 55%, transparent); }
+  tbody tr.rerun-row td { background: color-mix(in srgb, var(--signal-soft) 45%, transparent); }
+
+  @keyframes rise { to { transform: none; opacity: 1; } }
+
+  @media (max-width: 640px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .comp, .rerun { grid-template-columns: 1fr; }
+    .stage { grid-template-columns: 44px 1fr; gap: 14px; }
+    .origin { grid-template-columns: 1fr; gap: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card { animation: none; opacity: 1; transform: none; }
+  }
+</style>
+
+<div class="wrap">
+
+  <p class="eyebrow">Self-healing CI &middot; Case study</p>
+  <h1>CI that catches its own gaps &mdash; <span class="lit">and closes them.</span></h1>
+  <p class="lede">
+    A GitHub Actions pipeline for <strong>vibe-tracker</strong> that doesn't just fail loudly.
+    When a pull request ships code without tests, it writes the tests, re-runs and re-verifies
+    its own CI, files any real bug it stumbles onto, and &mdash; on one label &mdash; opens the fix.
+    Every step below actually happened &mdash; twice now, on two unrelated features. Every merge stayed in human hands.
+  </p>
+  <div class="meta">
+    <a class="chip" href="https://github.com/keithsecond/vibe-tracker" target="_blank" rel="noopener"><span class="dot"></span>keithsecond/vibe-tracker</a>
+    <span class="chip">anthropics/claude-code-action</span>
+    <span class="chip">Playwright</span>
+    <span class="chip">GitHub App token</span>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><span class="n">2</span><span class="l">independent self-healing runs, catch&nbsp;&rarr;&nbsp;re-verify</span></div>
+    <div class="stat"><span class="n">8</span><span class="l">Playwright tests the bot wrote for run #2, unprompted</span></div>
+    <div class="stat"><span class="n">1</span><span class="l">real bug found &amp; fixed autonomously</span></div>
+    <div class="stat"><span class="n">100%</span><span class="l">of merges human-approved</span></div>
+  </div>
+
+  <section class="section">
+    <h2>Where it started</h2>
+    <p class="sub">The loop can't heal a pipeline that doesn't exist yet. The whole apparatus &mdash; the
+      Playwright suites, the coverage gate, and the review/heal workflow &mdash; was instantiated in a
+      single foundational PR before any of the self-healing runs below could fire.</p>
+    <div class="origin">
+      <span class="seed">Instantiation</span>
+      <div>
+        <h3>PR&nbsp;#2 &mdash; the pipeline is stood up</h3>
+        <p>Adds the Playwright <code>smoke</code> and <code>regression</code> suites, the deterministic
+          coverage gate in <code>pr.yml</code>, and the <code>claude-review.yml</code> review-and-heal
+          workflow &mdash; plus the <code>server.js</code> changes that let tests run against fixtures
+          instead of live data. This is the seed every later stage grows from.</p>
+        <a class="ref" href="https://github.com/keithsecond/vibe-tracker/pull/2" target="_blank" rel="noopener">PR #2 &middot; Add Playwright integration tests and CI workflows</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>The loop</h2>
+    <p class="sub">Five stages fire in sequence off a single failing check. Warm nodes are where the system
+      <em>detects</em>; green nodes are where it <em>resolves</em>.</p>
+
+    <div class="loop">
+
+      <div class="stage detect">
+        <div class="rail"><span class="num">01</span><span class="node"></span><span class="line"></span></div>
+        <div class="card" style="--d:.05s">
+          <span class="kind">Detect</span>
+          <h3>Catch</h3>
+          <p>A deterministic <strong>coverage gate</strong> fails the feature PR: <code>server.js</code> and
+            <code>index.html</code> changed, but nothing under <code>test/</code>.</p>
+          <a class="ref" href="https://github.com/keithsecond/vibe-tracker/pull/6" target="_blank" rel="noopener">PR #6 &middot; coverage gate red</a>
+        </div>
+      </div>
+
+      <div class="stage resolve">
+        <div class="rail"><span class="num">02</span><span class="node"></span><span class="line"></span></div>
+        <div class="card" style="--d:.14s">
+          <span class="kind">Resolve</span>
+          <h3>Heal</h3>
+          <p>Auto-heal reproduces the failure, decides <em>tests are missing, not the code</em>, writes the
+            Playwright suite, and pushes an <code>[auto-heal]</code> commit &mdash; capped at 3 attempts.</p>
+          <a class="ref" href="https://github.com/keithsecond/vibe-tracker/pull/6" target="_blank" rel="noopener">PR #6 &middot; commit 073e0eb</a>
+        </div>
+      </div>
+
+      <div class="stage resolve">
+        <div class="rail"><span class="num">03</span><span class="node"></span><span class="line"></span></div>
+        <div class="card" style="--d:.23s">
+          <span class="kind">Resolve</span>
+          <h3>Re-verify</h3>
+          <p>The fix commit is pushed with a <strong>GitHub App token</strong>, so it <em>re-triggers CI</em> &mdash;
+            which runs green. A commit pushed with the default <code>GITHUB_TOKEN</code> can't do this, and that
+            was the whole unlock.</p>
+          <a class="ref" href="https://github.com/keithsecond/vibe-tracker/pull/6" target="_blank" rel="noopener">PR #6 &middot; CI re-run green</a>
+        </div>
+      </div>
+
+      <div class="stage detect">
+        <div class="rail"><span class="num">04</span><span class="node"></span><span class="line"></span></div>
+        <div class="card" style="--d:.32s">
+          <span class="kind">Detect</span>
+          <h3>File</h3>
+          <p>While writing the promote-flow test it hits a genuine UI race &mdash; a panel re-fetch that can
+            silently discard a user's selection &mdash; and files it as a deduplicated, labeled issue instead
+            of patching it inline.</p>
+          <a class="ref" href="https://github.com/keithsecond/vibe-tracker/issues/7" target="_blank" rel="noopener">Issue #7 &middot; bug, auto-filed</a>
+        </div>
+      </div>
+
+      <div class="stage resolve">
+        <div class="rail"><span class="num">05</span><span class="node"></span></div>
+        <div class="card" style="--d:.41s">
+          <span class="kind">Resolve</span>
+          <h3>Fix</h3>
+          <p>One <code>auto-fix</code> label on the issue opens a PR: a minimal fix (<code>await</code> the fetch
+            before revealing the panel) plus a regression test that fails on the old code. CI green.</p>
+          <a class="ref" href="https://github.com/keithsecond/vibe-tracker/pull/8" target="_blank" rel="noopener">PR #8 &middot; Fixes #7</a>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="rail"></div>
+        <div class="closer"><span class="arc">&#8630;</span> PR #8 re-enters the same gate &rarr; CI &rarr; human merge. The loop closes on itself.</div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>The unlock</h2>
+    <p class="sub">Why the system can close its own loop instead of stalling halfway.</p>
+    <div class="callout">
+      <h3>A bot that can re-run its own CI</h3>
+      <p>GitHub deliberately refuses to let a commit pushed with the workflow's built-in <code>GITHUB_TOKEN</code>
+        trigger new workflow runs &mdash; a guard against infinite loops. So the first attempt at auto-heal healed
+        the code but its fix landed a <em>gated, never-executed</em> CI run: dead end.</p>
+      <p>The fix was to push with a <strong>GitHub App installation token</strong> instead. GitHub treats that as a
+        real actor, so the <code>[auto-heal]</code> commit re-triggers the suite and the pipeline proves itself
+        green &mdash; bounded to 3 attempts, and never merging. Humans still own every merge.</p>
+    </div>
+    <div class="comp">
+      <div class="c">
+        <span class="f">pr.yml</span>
+        <span class="t">Playwright smoke + regression suites and the deterministic coverage gate.</span>
+        <span class="born">Instantiated in <a href="https://github.com/keithsecond/vibe-tracker/pull/2" target="_blank" rel="noopener">PR #2</a></span>
+      </div>
+      <div class="c">
+        <span class="f">claude-review.yml</span>
+        <span class="t">Reviews on request; auto-heals failing CI and files out-of-scope bugs.</span>
+        <span class="born">Instantiated in <a href="https://github.com/keithsecond/vibe-tracker/pull/2" target="_blank" rel="noopener">PR #2</a>, App-token heal added in <a href="https://github.com/keithsecond/vibe-tracker/pull/5" target="_blank" rel="noopener">PR #5</a></span>
+      </div>
+      <div class="c">
+        <span class="f">claude-issue-autofix.yml</span>
+        <span class="t">Label an issue <code>auto-fix</code> and a fix PR opens itself.</span>
+        <span class="born">Added in <a href="https://github.com/keithsecond/vibe-tracker/pull/5" target="_blank" rel="noopener">PR #5</a></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>The loop reproduces</h2>
+    <p class="sub">The run above could have been a fluke. So the next feature was shipped as a deliberate test:
+      the hand-written spec was held back on a sibling branch, leaving the server change bare &mdash; to see
+      whether the same gate would catch a feature the pipeline had never touched, and what the bot would write
+      on its own.</p>
+
+    <div class="origin">
+      <span class="seed">Run 02</span>
+      <div>
+        <h3>PR&nbsp;#14 &mdash; a new feature, tests withheld on purpose</h3>
+        <p>Dismissing a draft site now demotes it into <code>blocked.sites.json</code> so discovery never
+          re-drafts it (design &sect;7.1). The feature landed with all its <code>server.js</code> logic &mdash;
+          <code>canon()</code>, <code>blockSite()</code>, <code>nextBlockedId()</code> &mdash; but no test in
+          the diff, by design, to hand the coverage gate a live target.</p>
+        <a class="ref" href="https://github.com/keithsecond/vibe-tracker/pull/14" target="_blank" rel="noopener">PR #14 &middot; feat(7.1) block dismissed draft sites</a>
+      </div>
+    </div>
+
+    <div class="rerun">
+      <div class="beat detect">
+        <span class="step">Catch</span>
+        <h3>Gate red again</h3>
+        <p><code>server.js</code> and <code>playwright.config.js</code> changed with nothing under
+          <code>test/</code>. The Playwright suite itself passed &mdash; a coverage gap, not a break.</p>
+        <span class="tag">Run <a href="https://github.com/keithsecond/vibe-tracker/actions/runs/30825985428" target="_blank" rel="noopener">30825985428</a> &middot; attempt 1</span>
+      </div>
+      <div class="beat resolve">
+        <span class="step">Heal</span>
+        <h3>8 tests, self-reported</h3>
+        <p>The bot wrote <code>blocked-sites.spec.js</code> covering id assignment, canonical-URL dedup and
+          malformed-file recovery &mdash; then posted a report naming what it deliberately left out.</p>
+        <span class="tag">Commit <a href="https://github.com/keithsecond/vibe-tracker/commit/52aeda6caf9cf9848bc764115cb3dbe528bbf9a4" target="_blank" rel="noopener">52aeda6</a> &middot; <code>[auto-heal]</code></span>
+      </div>
+      <div class="beat resolve">
+        <span class="step">Re-verify</span>
+        <h3>Green, then merged</h3>
+        <p>The App-token push re-triggered CI; the coverage gate and Playwright both ran green. Keith merged it
+          &mdash; the same five stages, on a feature the pipeline had never seen.</p>
+        <span class="tag">Run <a href="https://github.com/keithsecond/vibe-tracker/actions/runs/30826539547" target="_blank" rel="noopener">30826539547</a> &middot; green</span>
+      </div>
+    </div>
+
+    <div class="callout spaced">
+      <h3>Benchmarked against a human</h3>
+      <p>Withholding the spec wasn't an oversight &mdash; it was the experiment. A hand-written suite existed the
+        whole time on a sibling branch, so the bot's generated tests could be read side by side with a human's for
+        the exact same feature. <a href="https://github.com/keithsecond/vibe-tracker/pull/15" target="_blank" rel="noopener">PR&nbsp;#15</a>
+        then brought the human side in: a seeded <code>blocked.sites.json</code> fixture and a hardened spec, 10
+        tests, full suite green at 42.</p>
+      <p>The bot didn't just fill the gap. It wrote a suite a reviewer would sign off on and named its own blind
+        spots &mdash; concurrent writes, and a case-sensitive <code>/Careers</code> segment it declined to guess at.
+        The gate caught the omission; the heal met the bar the human then held it to.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Artifacts</h2>
+    <p class="sub">The whole run is public and durable &mdash; two self-healing runs, a bot-filed bug, its autonomous
+      fix, and the human-vs-bot test comparison, all starting from the pipeline's instantiation in PR&nbsp;#2.</p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Artifact</th><th>Role</th><th>Author</th><th>State</th></tr>
+        </thead>
+        <tbody>
+          <tr class="seed-row">
+            <td class="art"><a href="https://github.com/keithsecond/vibe-tracker/pull/2" target="_blank" rel="noopener">PR&nbsp;#2</a></td>
+            <td>Initial workflow instantiation &mdash; Playwright suites, coverage gate, and the review/heal workflow</td>
+            <td>Keith&nbsp;+ Claude Code</td>
+            <td><span class="state merged">Merged</span></td>
+          </tr>
+          <tr>
+            <td class="art"><a href="https://github.com/keithsecond/vibe-tracker/pull/5" target="_blank" rel="noopener">PR&nbsp;#5</a></td>
+            <td>Automation harness &mdash; App-token re-trigger, bug auto-filing, issue auto-fix</td>
+            <td>Keith&nbsp;+ Claude Code</td>
+            <td><span class="state merged">Merged</span></td>
+          </tr>
+          <tr>
+            <td class="art"><a href="https://github.com/keithsecond/vibe-tracker/pull/6" target="_blank" rel="noopener">PR&nbsp;#6</a></td>
+            <td>Run 01 feature PR &mdash; healed and re-verified in place</td>
+            <td>Keith; healed by bot</td>
+            <td><span class="state merged">Merged</span></td>
+          </tr>
+          <tr>
+            <td class="art"><a href="https://github.com/keithsecond/vibe-tracker/issues/7" target="_blank" rel="noopener">Issue&nbsp;#7</a></td>
+            <td>Draft-panel re-fetch race &mdash; auto-filed while testing</td>
+            <td>autoheal-ci-bot</td>
+            <td><span class="state closed">Closed</span></td>
+          </tr>
+          <tr>
+            <td class="art"><a href="https://github.com/keithsecond/vibe-tracker/pull/8" target="_blank" rel="noopener">PR&nbsp;#8</a></td>
+            <td>Autonomous fix + regression test for #7</td>
+            <td>autoheal-ci-bot</td>
+            <td><span class="state merged">Merged</span></td>
+          </tr>
+          <tr class="rerun-row">
+            <td class="art"><a href="https://github.com/keithsecond/vibe-tracker/pull/14" target="_blank" rel="noopener">PR&nbsp;#14</a></td>
+            <td>Run 02 feature PR &mdash; blocked-sites feature, tests withheld and healed in place</td>
+            <td>Keith; healed by bot</td>
+            <td><span class="state merged">Merged</span></td>
+          </tr>
+          <tr class="rerun-row">
+            <td class="art"><a href="https://github.com/keithsecond/vibe-tracker/pull/15" target="_blank" rel="noopener">PR&nbsp;#15</a></td>
+            <td>The human side of the comparison &mdash; seeded fixture + hardened spec for run 02</td>
+            <td>Keith&nbsp;+ Claude Code</td>
+            <td><span class="state merged">Merged</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <span>Built with claude-code-action + Playwright on GitHub Actions.</span>
+    <span class="gated">Every merge human-gated.</span>
+    <a href="https://github.com/keithsecond/vibe-tracker" target="_blank" rel="noopener">keithsecond/vibe-tracker &rarr;</a>
+  </footer>
+
+</div>
