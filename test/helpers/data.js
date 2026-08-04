@@ -18,9 +18,6 @@ const DESCRIPTION_DIR = path.join(DATA_DIR, 'description');
 const DRAFT_SITES_FILE = path.join(DATA_DIR, 'draft.sites.json');
 const SITES_FILE = path.join(DATA_DIR, 'sites.json');
 const FILTERS_FILE = path.join(DATA_DIR, 'filters.json');
-// blocked.sites.json has no fixture: server.js creates it on first write, so
-// resetData() just needs to make sure it doesn't survive from a prior test
-// (handled by the DATA_DIR wipe below).
 const BLOCKED_SITES_FILE = path.join(DATA_DIR, 'blocked.sites.json');
 
 const FIXTURES_DIR = path.join(__dirname, '..', 'fixtures');
@@ -29,6 +26,7 @@ const FIXTURE_DESCRIPTION_DIR = path.join(FIXTURES_DIR, 'description');
 const FIXTURE_DRAFT_SITES_FILE = path.join(FIXTURES_DIR, 'draft.sites.json');
 const FIXTURE_SITES_FILE = path.join(FIXTURES_DIR, 'sites.json');
 const FIXTURE_FILTERS_FILE = path.join(FIXTURES_DIR, 'filters.json');
+const FIXTURE_BLOCKED_SITES_FILE = path.join(FIXTURES_DIR, 'blocked.sites.json');
 
 /** Copy the fixtures fresh into the disposable temp data dir. */
 function resetData() {
@@ -44,6 +42,7 @@ function resetData() {
   fs.copyFileSync(FIXTURE_DRAFT_SITES_FILE, DRAFT_SITES_FILE);
   fs.copyFileSync(FIXTURE_SITES_FILE, SITES_FILE);
   fs.copyFileSync(FIXTURE_FILTERS_FILE, FILTERS_FILE);
+  fs.copyFileSync(FIXTURE_BLOCKED_SITES_FILE, BLOCKED_SITES_FILE);
 }
 
 /** Read the current job-results data the server is operating on. */
