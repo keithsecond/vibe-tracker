@@ -63,10 +63,11 @@ test.describe('@regression manage sites', () => {
 
     expect(data.categories.Private.map((s) => s.id)).toEqual(['P001']);
 
-    // Eightfold: the fixture root tenant (id acmeTenant) + the sdetOnly E001.
-    const eightfoldIds = data.eightfold.map((e) => e.id).sort();
-    expect(eightfoldIds).toEqual(['E001', 'acmeTenant']);
-    expect(data.eightfold.find((e) => e.id === 'E001')).toMatchObject({ org: 'ExistingCo', scope: 'sdetOnly' });
+    // Eightfold: only the well-formed sdetOnly E001. The fixture's root `acme`
+    // tenant is a deliberately-degenerate distractor for the promotion/id-gen
+    // tests (no baseUrl), so GET /sites must not surface it as a deletable site.
+    expect(data.eightfold.map((e) => e.id)).toEqual(['E001']);
+    expect(data.eightfold[0]).toMatchObject({ org: 'ExistingCo', scope: 'sdetOnly' });
 
     // Globex is in jobResults + has a description file but is in no registry.
     expect(data.orphans).toEqual([{ key: 'Globex', jobs: 2 }]);
@@ -232,8 +233,9 @@ test.describe('@regression manage sites', () => {
 
   test('the Manage Sites badge counts every deletable row on load', async ({ page }) => {
     await page.goto('/');
-    // 1 Private (Acme) + 2 Eightfold (acmeTenant, E001) + 1 orphan (Globex).
-    await expect(page.locator('#manageCount')).toHaveText('4');
+    // 1 Private (Acme) + 1 Eightfold (E001; the degenerate root `acme` tenant is
+    // skipped) + 1 orphan (Globex).
+    await expect(page.locator('#manageCount')).toHaveText('3');
   });
 
   test('opening the panel awaits the re-fetch before revealing (matches Draft #7 guard)', async ({ page }) => {

@@ -275,7 +275,11 @@ app.get('/sites', (req, res) => {
       for (const key of Object.keys(container || {})) {
         if (scope === 'root' && key === 'sdetOnly') continue;
         const t = container[key];
-        if (!t || !t.id) continue;
+        // Require both an id and a baseUrl: baseUrl is the canonical identity a
+        // delete blocks on (real tenants always carry one, DESIGN §2.4), so a
+        // tenant without one isn't a real, deletable site — skip it rather than
+        // surface a row whose delete would block an undefined URL.
+        if (!t || !t.id || !t.baseUrl) continue;
         eightfold.push({ id: t.id, org: t.org || key, subdomain: t.subdomain, baseUrl: t.baseUrl, scope });
         registryNames.add(normName(t.org || key));
       }
