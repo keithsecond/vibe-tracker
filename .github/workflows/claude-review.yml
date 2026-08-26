@@ -25,6 +25,15 @@ name: Claude review & auto-heal
 #   - The Claude GitHub App installed on the repo (for the action to act as a bot).
 #   - "Allow GitHub Actions to create and approve pull requests" is NOT required;
 #     merges stay human-gated on purpose.
+#
+# Trust model (this repo is public):
+#   - The `@claude` comment triggers only fire for OWNER/MEMBER/COLLABORATOR, so an
+#     arbitrary public commenter can't invoke the (paid, write-scoped) action.
+#   - auto-heal only runs for PRs whose head branch lives in THIS repo, so its
+#     privileged workflow_run context (which carries the secrets + App token and runs
+#     `npm ci` on the checked-out branch) never touches fork-contributed code.
+#   - The `claude-review` label path is already gated implicitly: applying a label
+#     requires write/triage access.
 
 on:
   issue_comment:
@@ -41,8 +50,17 @@ jobs:
   review:
     name: Suggest tests / review
     if: >
-      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        contains(github.event.comment.body, '@claude') &&
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+      ) ||
+      (
+        github.event_name == 'pull_request_review_comment' &&
+        contains(github.event.comment.body, '@claude') &&
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+      ) ||
       (github.event_name == 'pull_request' && github.event.label.name == 'claude-review')
     runs-on: ubuntu-latest
     permissions:
@@ -84,7 +102,8 @@ jobs:
     if: >
       github.event_name == 'workflow_run' &&
       github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion == 'failure'
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: write

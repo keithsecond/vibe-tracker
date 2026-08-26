@@ -21,12 +21,20 @@ on:
 jobs:
   auto-fix:
     name: Open a fix PR from a labeled issue
+    # Trust gate: applying the `auto-fix` label requires write/triage access, so a
+    # random public user can't start this job. Untrusted issue-authored text (title,
+    # body) is passed to the step via env below, per GitHub's hardening guidance,
+    # rather than inlined into the prompt expression.
     if: ${{ github.event.label.name == 'auto-fix' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
       issues: write
+    env:
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      ISSUE_TITLE: ${{ github.event.issue.title }}
+      ISSUE_BODY: ${{ github.event.issue.body }}
     steps:
       - name: Mint a GitHub App token
         id: app-token
@@ -46,18 +54,18 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ steps.app-token.outputs.token }}
           prompt: |
-            Issue #${{ github.event.issue.number }} was labeled `auto-fix`.
+            Issue #${{ env.ISSUE_NUMBER }} was labeled `auto-fix`.
 
-            Title: ${{ github.event.issue.title }}
+            Title: ${{ env.ISSUE_TITLE }}
 
             Body:
-            ${{ github.event.issue.body }}
+            ${{ env.ISSUE_BODY }}
 
             Implement a fix:
             1. Understand and reproduce the bug. Read the relevant code
                (server.js, public/index.html, test/).
             2. Create a NEW branch off the default branch (main), named
-               fix/issue-${{ github.event.issue.number }}.
+               fix/issue-${{ env.ISSUE_NUMBER }}.
             3. Apply a MINIMAL, well-scoped fix — no unrelated refactors. If the code
                the issue describes is not present on main yet (e.g. it lives in an
                unmerged feature PR), stop and post a comment on the issue saying the
@@ -67,8 +75,8 @@ jobs:
                canonical data shapes (match the style in test/regression.spec.js,
                using test/helpers/data.js). Run `npm ci`, `npm run test:smoke`, and
                `npm run test:regression` and confirm they pass.
-            5. Open a pull request from fix/issue-${{ github.event.issue.number }} into
-               main whose body starts with "Fixes #${{ github.event.issue.number }}"
+            5. Open a pull request from fix/issue-${{ env.ISSUE_NUMBER }} into
+               main whose body starts with "Fixes #${{ env.ISSUE_NUMBER }}"
                and summarizes the fix and the test you added.
             Do NOT push to main and do NOT merge the PR — leave it for human review.
           claude_args: '--allowedTools "Read,Edit,Write,Grep,Glob,Bash(npm:*),Bash(git:*),mcp__github__*"'
