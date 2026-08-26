@@ -348,6 +348,110 @@
       white-space: nowrap;
     }
 
+    /* ========================================
+       MANAGE SITES SECTION
+       ======================================== */
+    #manageSection {
+      display: none;
+      margin-bottom: 25px;
+    }
+
+    #manageContent h4 {
+      margin: 18px 0 6px;
+      font-size: 1em;
+    }
+
+    #manageContent table td:nth-child(3) {
+      max-width: 280px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .btn-delete {
+      background-color: #dc3545;
+      color: white;
+      padding: 5px 10px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
+
+    .btn-delete:hover { background-color: #b02a37; }
+    body.dark .btn-delete { background-color: #a71d2a; }
+    body.dark .btn-delete:hover { background-color: #dc3545; }
+
+    .orphan-badge {
+      display: inline-block;
+      background-color: #fd7e14;
+      color: white;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    /* Typed-confirmation modal for deletes */
+    #confirmModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #confirmModal.open { display: flex; }
+
+    .confirm-box {
+      background: white;
+      color: #222;
+      border-radius: 8px;
+      padding: 24px;
+      max-width: 460px;
+      width: calc(100% - 40px);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+    }
+
+    body.dark .confirm-box {
+      background: #2a2a2a;
+      color: #ddd;
+    }
+
+    .confirm-box h3 { margin-bottom: 12px; }
+
+    .confirm-box ul {
+      margin: 10px 0 14px 20px;
+    }
+
+    .confirm-box code {
+      background: rgba(0, 0, 0, 0.08);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+
+    body.dark .confirm-box code { background: rgba(255, 255, 255, 0.12); }
+
+    #confirmInput { width: 100%; margin: 6px 0 16px; }
+
+    .confirm-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    #confirmDeleteBtn:disabled {
+      background-color: #e2a3aa;
+      cursor: not-allowed;
+    }
+
+    body.dark #confirmDeleteBtn:disabled { background-color: #5c2f34; }
+
     @media (max-width: 768px) {
       body {
         margin: 20px 10px;
@@ -407,6 +511,7 @@
 
     <button onclick="toggleDark()">🌙 Dark Mode</button>
     <button onclick="toggleDraftSection()">Draft Sites <span id="draftCount" class="badge">0</span></button>
+    <button onclick="toggleManageSection()">Manage Sites <span id="manageCount" class="badge">0</span></button>
   </div>
 
   <!-- ========== ADD JOB FORM ========== -->
@@ -471,6 +576,27 @@
   <div id="draftSection">
     <h3>Draft Sites Review</h3>
     <div id="draftContent"></div>
+  </div>
+
+  <!-- ========== MANAGE SITES SECTION ========== -->
+  <div id="manageSection">
+    <h3>Manage Sites</h3>
+    <div id="manageContent"></div>
+  </div>
+
+  <!-- ========== DELETE CONFIRMATION MODAL ========== -->
+  <div id="confirmModal">
+    <div class="confirm-box">
+      <h3>Delete site</h3>
+      <p id="confirmLead"></p>
+      <ul id="confirmArtifacts"></ul>
+      <p>Type <code id="confirmName"></code> to confirm. This cannot be undone.</p>
+      <input id="confirmInput" type="text" autocomplete="off" placeholder="Type the name to confirm" />
+      <div class="confirm-actions">
+        <button class="btn-dismiss" id="confirmCancelBtn" style="margin-left:0">Cancel</button>
+        <button class="btn-delete" id="confirmDeleteBtn" disabled>Delete</button>
+      </div>
+    </div>
   </div>
 
   <!-- ========== JOBS TABLE ========== -->
@@ -889,6 +1015,206 @@
     }
 
     // ========================================
+    // MANAGE SITES
+    // ========================================
+
+    // Flat index of the currently-rendered deletable rows; Delete buttons carry
+    // a data-row pointing here so org names with quotes/apostrophes never have
+    // to survive an inline onclick string.
+    let manageRows = [];
+    let pendingDelete = null;
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    async function toggleManageSection() {
+      const section = document.getElementById('manageSection');
+      const isHidden = section.style.display === 'none' || section.style.display === '';
+      if (isHidden) {
+        // Same guard as the Draft panel (#7): await the re-fetch/re-render
+        // before revealing, so no stale-but-interactive table is exposed.
+        await loadSites();
+        section.style.display = 'block';
+      } else {
+        section.style.display = 'none';
+      }
+    }
+
+    async function loadSites() {
+      try {
+        const res = await fetch('/sites');
+        const data = await res.json();
+        renderSites(data);
+      } catch (error) {
+        console.error('Error loading sites:', error);
+      }
+    }
+
+    function siteRowsHtml(entries, startIndex, urlOf) {
+      return entries
+        .map((entry, i) => {
+          const rowIndex = startIndex + i;
+          const url = urlOf(entry);
+          return `
+        <tr>
+          <td>${escapeHtml(entry.id)}</td>
+          <td>${escapeHtml(entry.org)}</td>
+          <td title="${escapeHtml(url)}">${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a>` : ''}</td>
+          <td>${escapeHtml(entry.Provider || entry.scope || '')}</td>
+          <td onclick="event.stopPropagation()">
+            <button class="btn-delete" data-row="${rowIndex}">Delete</button>
+          </td>
+        </tr>`;
+        })
+        .join('');
+    }
+
+    function renderSites(data) {
+      manageRows = [];
+      const content = document.getElementById('manageContent');
+      const sections = [];
+
+      const categories = data.categories || {};
+      for (const category of DRAFT_CATEGORIES) {
+        const entries = categories[category] || [];
+        if (!entries.length) continue;
+        const start = manageRows.length;
+        entries.forEach((e) => {
+          manageRows.push({
+            payload: { siteId: e.id },
+            name: e.org,
+            artifacts: ['The registry entry', 'Its job-results vendor block (if any)', 'Its description file (if any)'],
+          });
+        });
+        sections.push(`
+          <h4>${category}</h4>
+          <table>
+            <thead><tr><th>ID</th><th>Org</th><th>URL</th><th>Provider</th><th>Action</th></tr></thead>
+            <tbody>${siteRowsHtml(entries, start, (e) => e.URL)}</tbody>
+          </table>`);
+      }
+
+      const eightfold = data.eightfold || [];
+      if (eightfold.length) {
+        const start = manageRows.length;
+        eightfold.forEach((e) => {
+          manageRows.push({
+            payload: { siteId: e.id },
+            name: e.org,
+            artifacts: ['The Eightfold tenant (filters.json)', 'Its job-results vendor block (if any)', 'Its description file (if any)'],
+          });
+        });
+        sections.push(`
+          <h4>Eightfold (filters.json)</h4>
+          <table>
+            <thead><tr><th>ID</th><th>Org</th><th>baseUrl</th><th>Scope</th><th>Action</th></tr></thead>
+            <tbody>${siteRowsHtml(eightfold, start, (e) => e.baseUrl)}</tbody>
+          </table>`);
+      }
+
+      const orphans = data.orphans || [];
+      if (orphans.length) {
+        const start = manageRows.length;
+        const rows = orphans
+          .map((o, i) => {
+            const rowIndex = start + i;
+            manageRows.push({
+              payload: { orphanKey: o.key },
+              name: o.key,
+              artifacts: ['Its job-results vendor block', 'Its description file (if any)'],
+            });
+            return `
+          <tr>
+            <td><span class="orphan-badge">orphan</span></td>
+            <td>${escapeHtml(o.key)}</td>
+            <td>${o.jobs} job(s)</td>
+            <td onclick="event.stopPropagation()">
+              <button class="btn-delete" data-row="${rowIndex}">Delete</button>
+            </td>
+          </tr>`;
+          })
+          .join('');
+        sections.push(`
+          <h4>Orphan vendors <span class="badge">${orphans.length}</span></h4>
+          <p>Job-results vendors with no registry entry — unreachable by a registry delete.</p>
+          <table>
+            <thead><tr><th></th><th>Vendor</th><th>Jobs</th><th>Action</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>`);
+      }
+
+      document.getElementById('manageCount').textContent = manageRows.length;
+      content.innerHTML = sections.length
+        ? sections.join('')
+        : '<div class="draft-empty">No sites registered.</div>';
+
+      content.querySelectorAll('button.btn-delete').forEach((btn) => {
+        btn.addEventListener('click', () => askDelete(Number(btn.dataset.row)));
+      });
+    }
+
+    function askDelete(rowIndex) {
+      const row = manageRows[rowIndex];
+      if (!row) return;
+      pendingDelete = row;
+
+      document.getElementById('confirmLead').textContent =
+        `Deleting "${row.name}" removes:`;
+      document.getElementById('confirmArtifacts').innerHTML =
+        row.artifacts.map((a) => `<li>${escapeHtml(a)}</li>`).join('');
+      document.getElementById('confirmName').textContent = row.name;
+
+      const input = document.getElementById('confirmInput');
+      const deleteBtn = document.getElementById('confirmDeleteBtn');
+      input.value = '';
+      deleteBtn.disabled = true;
+
+      document.getElementById('confirmModal').classList.add('open');
+      input.focus();
+    }
+
+    function closeConfirm() {
+      document.getElementById('confirmModal').classList.remove('open');
+      pendingDelete = null;
+    }
+
+    async function performDelete() {
+      if (!pendingDelete) return;
+      const payload = pendingDelete.payload;
+      try {
+        const response = await fetch('/deleteSite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json();
+        if (result.success) {
+          closeConfirm();
+          loadSites();
+          loadJobs();
+          loadVendors();
+        } else {
+          alert(`Error: ${result.message}`);
+        }
+      } catch (error) {
+        console.error('Error deleting site:', error);
+        alert('Failed to delete site. Check console for details.');
+      }
+    }
+
+    document.getElementById('confirmInput').addEventListener('input', (e) => {
+      const deleteBtn = document.getElementById('confirmDeleteBtn');
+      deleteBtn.disabled = !pendingDelete || e.target.value !== pendingDelete.name;
+    });
+    document.getElementById('confirmDeleteBtn').addEventListener('click', performDelete);
+    document.getElementById('confirmCancelBtn').addEventListener('click', closeConfirm);
+
+    // ========================================
     // EVENT LISTENERS
     // ========================================
 
@@ -963,6 +1289,7 @@
     loadJobs();
     loadVendors();
     loadDraftSites();
+    loadSites();
   </script>
 
 </body>
